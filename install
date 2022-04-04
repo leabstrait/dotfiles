@@ -149,7 +149,7 @@ install_packages() {
     _process "→ Installing packages with Pamac"
 
     # Set variable for list of packages
-    packages_list="${DOTFILES_DIR}/pacman-packages.list"
+    packages_list="${DOTFILES_DIR}/linux-packages.list"
 
     # Update and upgrade all packages
     _process "→ Updating and upgrading packages"
