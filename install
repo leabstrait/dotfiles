@@ -32,6 +32,21 @@ _failure() {
   printf "%s✗ Failure:%s\n" "$(tput setaf 1)" "$(tput sgr0) $message"$'\n'
 }
 
+clone_dotfiles() {
+  if [ ! -d "${DOTFILES_DIR}" ]; then
+    _process "→ Creating directory at ${DOTFILES_DIR} and setting permissions"
+    mkdir -p "${DOTFILES_DIR}"
+
+    _process "→ Cloning repository to ${DOTFILES_DIR}"
+    git clone "git@github.com:${GITHUB_USER}/${GITHUB_REPO}.git" "${DOTFILES_DIR}"
+
+    [[ $? ]] && _success "${DOTFILES_DIR} created, repository cloned"
+
+    # Change to the dotfiles directory
+    cd "${DOTFILES_DIR}"
+  fi
+}
+
 setup_ssh() {
   _process "→ Setting up SSH"
 
@@ -236,25 +251,29 @@ enable_services() {
 link_dotfiles() {
   # symlink files to the ROOT(/) directory.
   if [[ -d "${DOTFILES_DIR}/CONFIG_ROOT" ]]; then
-    _process "→ Symlinking dotfiles in /CONFIG_ROOT"
+    _process "→ Symlinking dotfiles in $DOTFILES_DIR/CONFIG_ROOT"
 
-    find "${DOTFILES_DIR}/CONFIG_ROOT" -type f | while read config_file; do
+    find "${DOTFILES_DIR}/CONFIG_ROOT" -type f -not -name "*.bak" | while read config_file; do
       _process "→ Linking ${config_file}"
 
-      filename=${config_file#"$DOTFILES_DIR/CONFIG_ROOT/"}
-      if [[ ! -L "/$filename" ]]; then
-        mkdir -p "$(dirname "/$filename")"
-        mv "/$filename" "$config_file.bak"
-        ln -sfv "$config_file" "/$filename"
-        _success "→ Linked $config_file to /$filename"
+      filename=${config_file#"$DOTFILES_DIR/CONFIG_ROOT"}
+      if [[ ! -L "$filename" ]]; then
+        if [ $filename = ${filename#"$HOME"} ]; then
+          sudo mkdir -p "$(dirname "$filename")"
+          sudo ln -sv "$config_file" "$filename"
+        else
+          mkdir -p "$(dirname "$filename")"
+          ln -sv "$config_file" "$filename"
+        fi
+        _success "→ Linked $config_file to $filename"
       else
         _warning "→ $filename already exists as a symlink"
-        # echo $(diff "$config_file" "/$filename")
+        # echo $(diff "$config_file" "$filename")
         _failure "→ Not linked $config_file; link exists"
       fi
     done
 
-    source "${HOME}/.profile"
+    source "${HOME}/.zprofile"
     [[ $? ]] && _success "All files have been copied"
   fi
 }
