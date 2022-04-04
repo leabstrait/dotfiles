@@ -99,6 +99,9 @@ setup_git() {
   GIT_AUTHOR_NAME=$(git config user.name)
   GIT_AUTHOR_EMAIL=$(git config user.email)
 
+  echo "GIT_AUTHOR_NAME: ${GIT_AUTHOR_NAME}"
+  echo "GIT_AUTHOR_EMAIL: ${GIT_AUTHOR_EMAIL}"
+
   if [[ -z "$GIT_AUTHOR_NAME" ]]; then
     _process "→ Setting up Git author"
 
@@ -109,6 +112,12 @@ setup_git() {
     else
       _warning "No Git user name has been set.  Please update manually"
     fi
+  else
+    _process "→ Git author already set, moving on..."
+  fi
+
+  if [[ -z "$GIT_AUTHOR_EMAIL" ]]; then
+    _process "→ Setting up Git email"
 
     read USER_GIT_AUTHOR_EMAIL
     if [[ ! -z "$USER_GIT_AUTHOR_EMAIL" ]]; then
@@ -118,43 +127,46 @@ setup_git() {
       _warning "No Git user email has been set.  Please update manually"
     fi
   else
-    _process "→ Git author already set, moving on..."
+    _process "→ Git author email already set, moving on..."
   fi
 }
 
-install_pamac() {
-  if ! type -P pamac &>/dev/null; then
-    _process "→ Installing Pamac"
-    git clone https://aur.archlinux.org/pamac-all.git
+install_paru() {
+  if ! type -P paru &>/dev/null; then
+    _process "→ Installing paru"
+    git clone https://aur.archlinux.org/paru.git
 
-    _process "→ Building Pamac"
-    cd pamac-all
+    # Install base-devel needed for builiding AUR packages
+    pacman -S base-devel --noconfirm
+
+    _process "→ Building paru"
+    cd paru
     makepkg -si
     [[ $? ]] &&
-      _success "Installed Pamac"
+      _success "Installed paru"
 
-    rm -rf pamac-all
+    cd $DOTFILES_DIR
+    rm -rf paru
 
     # Install some necessary packages
-    pamac install polkit
+    paru -S polkit --noconfirm
   else
-    _process "→ Pamac already installed, moving on..."
+    _process "→ paru already installed, moving on..."
   fi
 }
 
 install_packages() {
-  if ! type -P pamac &>/dev/null; then
-    _failure "Pamac not found"
+  if ! type -P paru &>/dev/null; then
+    _failure "paru not found"
   else
-    _process "→ Installing packages with Pamac"
+    _process "→ Installing packages with paru"
 
     # Set variable for list of packages
     packages_list="${DOTFILES_DIR}/linux-packages.list"
 
     # Update and upgrade all packages
     _process "→ Updating and upgrading packages"
-    pamac update
-    pamac upgrade
+    paru -Syu
 
     # Store IFS within a temp variable
     OIFS=$IFS
@@ -167,15 +179,16 @@ install_packages() {
     _process "→ Checking status of desired package"
     for index in ${!packages[*]}; do
       # Test whether a package is already installed
-      if ! pamac list ${packages[$index]} &>/dev/null; then
-        pamac install ${packages[$index]}
+      echo "${packages[$index]}"
+      if ! paru -Qi ${packages[$index]} &>/dev/null; then
+        paru -S ${packages[$index]} --noconfirm
       fi
     done
 
     # Reset IFS back
     IFS=$OIFS
 
-    pamac clean
+    #paru clean
 
     [[ $? ]] && _success "All packages installed and updated"
   fi
@@ -214,19 +227,10 @@ install_vscode_extensions() {
   fi
 }
 
-clone_dotfiles() {
-  if [ ! -d "${DOTFILES_DIR}" ]; then
-    _process "→ Creating directory at ${DOTFILES_DIR} and setting permissions"
-    mkdir -p "${DOTFILES_DIR}"
-
-    _process "→ Cloning repository to ${DOTFILES_DIR}"
-    git clone "git@github.com:${GITHUB_USER}/${GITHUB_REPO}.git" "${DOTFILES_DIR}"
-
-    [[ $? ]] && _success "${DOTFILES_DIR} created, repository cloned"
-
-    # Change to the dotfiles directory
-    cd "${DOTFILES_DIR}"
-  fi
+enable_services() {
+  systemctl --user enable conky
+  sudo systemctl enable fstrim.timer
+  sudo systemctl enable NetworkManager
 }
 
 link_dotfiles() {
@@ -259,12 +263,13 @@ install() {
   # start with a clean logfile
   echo >"${DOTFILES_INSTALL_LOG}"
 
+  clone_dotfiles
   setup_ssh
   setup_git
-  install_pamac
+  install_paru
   install_packages
   install_vscode_extensions
-  clone_dotfiles
+  enable_services
   link_dotfiles
 }
 
