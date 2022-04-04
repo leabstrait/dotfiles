@@ -84,7 +84,6 @@
         "plaintext": true,
         "markdown": true
     },
-    "gitlens.mode.active": "review",
     "editor.formatOnPaste": true,
     "editor.formatOnSave": true,
     "[dockerfile]": {
