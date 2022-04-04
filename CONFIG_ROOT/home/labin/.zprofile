@@ -30,3 +30,9 @@ export GTK_IM_MODULE="ibus"
 export QT_IM_MODULE="ibus"
 export DefaultIMModule=ibus
 ibus-daemon -drxR
+
+# Start X on login
+export WM=xfce
+if [ -z "${DISPLAY}" ] && [ "${XDG_VTNR}" -eq 1 ]; then
+    exec startx
+fi
