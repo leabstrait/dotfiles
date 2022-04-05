@@ -319,14 +319,14 @@ colors:
 
   # Bright colors
   bright :
-    black  : '#373b41'
+    black  : '#000000'
     red    : '#cc342b'
     green  : '#2eb398'
     yellow : '#ceb604'
     blue   : '#3971ed'
     magenta: '#a36ac7'
     cyan   : '#3971ed'
-    white  : '#ffffff'
+    white  : '#000000'
 
 # Bell
 #
