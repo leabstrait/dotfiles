@@ -19,7 +19,7 @@ code --list-extensions >$HOME/dotfiles/vscode-extensions.list
 
 # Export explicitly installed packages
 # pacman -Qqte >$HOME/dotfiles/linux-packages.list
-paru -Qqte >$HOME/dotfiles/linux-packages.list
+paru -Qqt >$HOME/dotfiles/linux-packages.list
 
 # Ibus autostart
 export XIM=ibus
