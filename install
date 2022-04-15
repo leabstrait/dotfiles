@@ -242,6 +242,13 @@ install_vscode_extensions() {
   fi
 }
 
+install_pictures() {
+  _process "→ Installing pictures"
+  sudo cp $DOTFILES_DIR/pictures/backgrounds/* /usr/share/backgrounds/
+  sudo cp $DOTFILES_DIR/pictures/icons/* /usr/share/icons/
+  [[ $? ]] && _success "Pictures installed"
+}
+
 enable_services() {
   systemctl --user enable conky
   sudo systemctl enable fstrim.timer
@@ -288,6 +295,7 @@ install() {
   install_paru
   install_packages
   install_vscode_extensions
+  install_pictures
   enable_services
   link_dotfiles
 }
