@@ -250,9 +250,10 @@ install_pictures() {
 }
 
 enable_services() {
-  systemctl --user enable conky
   sudo systemctl enable fstrim.timer
   sudo systemctl enable NetworkManager
+  sudo systemctl enable lightdm
+  systemctl --user enable conky
 }
 
 link_dotfiles() {
