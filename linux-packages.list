@@ -40,14 +40,13 @@ make
 meld
 meson
 mousepad
+mpv
 mugshot
 nano
-neofetch
 nerd-fonts-fira-code
 network-manager-applet
 nvm
 papirus-icon-theme
-parole
 paru
 patch
 perl-xml-libxml
@@ -72,9 +71,9 @@ ttf-nepali-fonts
 ttf2woff
 unicode-emoji
 vala
+video-downloader
 viewnior
 visual-studio-code-bin
-vlc
 xclip
 xdg-user-dirs
 xf86-video-intel
@@ -129,6 +128,7 @@ xorg-x11perf
 xorg-xbacklight
 xorg-xcmsdb
 xorg-xcursorgen
+xorg-xdpyinfo
 xorg-xdriinfo
 xorg-xev
 xorg-xgamma

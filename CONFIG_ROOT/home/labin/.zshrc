@@ -50,9 +50,6 @@ alias free="free -m"                                            # Show sizes in 
 # package manager
 # alias to generate and save mirrorlist for pacman
 
-# dmenu incl. config
-alias dmenu="dmenu -p '' -i -fn 'NotoSansMono Nerd Font-10' -nb '#f0f0f0' -nf '#424242'  -sb '#5294e2' -sf '#f2f2f2'"
-
 # sql clients
 alias psql="pgcli"
 alias mysql="mycli"
@@ -283,6 +280,3 @@ export SUDO_PROMPT=$'\e[33mPassword:\e[0m '                     # Make the sudo 
 source /usr/share/nvm/nvm.sh
 source /usr/share/nvm/bash_completion
 source /usr/share/nvm/install-nvm-exec
-
-# Swag
-# neofetch
