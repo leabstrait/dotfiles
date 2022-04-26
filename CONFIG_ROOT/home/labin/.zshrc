@@ -9,7 +9,6 @@
 
 #set -euo pipefail
 
-
 ### Options ###
 setopt correct                                                  # Auto correct mistakes
 setopt extendedglob                                             # Extended globbing. Allows using regular expressions with *
@@ -278,15 +277,6 @@ bindkey '^[[B' history-substring-search-down                    # ↓ -> --- -- 
 WORDCHARS=${WORDCHARS//\/[&.;]}                                 # Don't consider certain characters part of the word
 PROMPT_EOL_MARK=''                                              # Removes the trailing % at the end of newlines
 export SUDO_PROMPT=$'\e[33mPassword:\e[0m '                     # Make the sudo prompt simpler and colorful
-
-### TMUX ###
-# if tmux is executable, X is running, and not inside a tmux session, then try to attach.
-# if attachment fails, start a new session
-if [ -x "$(command -v tmux)" ] && [ -n "$DISPLAY" ]; then
-    [ -z "$TMUX" ] && { tmux attach-session -d -t home -c "$HOME" ||
-        exec tmux new-session -s home -c "$HOME" && exit
-    } >/dev/null 2>&1
-fi
 
 ### NVM - Node Version Manager ###
 [ -z "$NVM_DIR" ] && export NVM_DIR="$HOME/.nvm"
