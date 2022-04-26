@@ -56,8 +56,8 @@
       <property name="&lt;Shift&gt;&lt;Super&gt;l" type="string" value="xfce4-session-logout"/>
       <property name="&lt;Shift&gt;&lt;Super&gt;w" type="string" value="exo-open --launch WebBrowser --incognito"/>
       <property name="&lt;Super&gt;y" type="string" value="xfce4-popup-clipman"/>
-      <property name="&lt;Super&gt;l" type="string" value="light-locker-command -al"/>
       <property name="&lt;Super&gt;a" type="string" value="dmenu_run -p &apos;λ&apos; -i -fn &apos;Noto Sans-11&apos; -nb &apos;#f0f0f0&apos; -nf &apos;#424242&apos;  -sb &apos;#2eb398&apos; -sf &apos;#f2f2f2&apos;"/>
+      <property name="&lt;Super&gt;l" type="string" value="light-locker-command -l"/>
       <property name="&lt;Super&gt;t" type="string" value="alacritty -e tmux-shell"/>
       <property name="&lt;Shift&gt;&lt;Super&gt;t" type="string" value="alacritty -e tmux"/>
     </property>
