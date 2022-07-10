@@ -2,8 +2,10 @@
     "editor.renderControlCharacters": true,
     "files.trimTrailingWhitespace": true,
     "workbench.colorTheme": "GitHub Light",
-    "editor.fontFamily": "'FiraCode Nerd Font', 'monospace', monospace",
-    "terminal.integrated.fontFamily": "'FiraCode Nerd Font', 'monospace', monospace",
+    "editor.fontFamily": "FiraCode Nerd Font",
+    "editor.fontLigatures": true,
+    "terminal.integrated.fontFamily": "FiraCode Nerd Font",
+    "debug.console.fontFamily": "FiraCode Nerd Font",
     "files.associations": {
         "*.djhtml": "html"
     },
@@ -52,10 +54,7 @@
         }
     },
     "terminal.integrated.defaultProfile.linux": "vscode-tmux-shell",
-    "debug.console.fontFamily": "'FiraCode Nerd Font', 'monospace', monospace",
     "terminal.integrated.tabs.enabled": true,
-    "sourcery.token": "user_IIhsJZQJpaxbkAWq71Vjs32bscCY1ignDp3bxYBccKwAEpS34fGanH2yzJ4",
-    "terminal.external.linuxExec": "alacritty",
     "terminal.integrated.enableBell": true,
     "git.untrackedChanges": "separate",
     "[json]": {
@@ -87,6 +86,7 @@
     },
     "editor.formatOnPaste": true,
     "editor.formatOnSave": true,
+    "editor.formatOnType": true,
     "[dockerfile]": {
         "editor.defaultFormatter": "ms-azuretools.vscode-docker"
     },
@@ -110,14 +110,32 @@
     "diffEditor.ignoreTrimWhitespace": false,
     "editor.wordWrap": "off",
     "diffEditor.wordWrap": "off",
-    "editor.guides.indentation": false,
-    "editor.guides.bracketPairs": false,
-    "editor.inlayHints.enabled": false,
+    "editor.guides.indentation": true,
+    "editor.guides.bracketPairs": "active",
+    "editor.inlayHints.enabled": "on",
     "[jsonc]": {
         "editor.defaultFormatter": "esbenp.prettier-vscode"
     },
-    "blockman.n01LineHeight": 0,
     "editor.renderLineHighlight": "all",
     "workbench.editor.highlightModifiedTabs": true,
+    "workbench.productIconTheme": "material-product-icons",
+    "editor.bracketPairColorization.independentColorPoolPerBracketType": true,
+    "editor.language.brackets": [
+        ["{", "}"],
+        ["[", "]"],
+        ["(", ")"]
+    ],
+    "workbench.tree.renderIndentGuides": "always",
+    "projectManager.git.baseFolders": [
+        "~/work",
+        "~/study",
+        "~/codes",
+        "~/dotfiles"
+    ],
+    "terminal.integrated.copyOnSelection": true,
+    "terminal.external.linuxExec": "alacritty -e vscode-tmux-shell",
+    "terminal.integrated.cursorBlinking": true,
+    "terminal.integrated.enablePersistentSessions": false,
+    "editor.find.autoFindInSelection": "multiline",
     "window.zoomLevel": -1.5
 }
