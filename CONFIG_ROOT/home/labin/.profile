@@ -30,3 +30,8 @@ export GTK_IM_MODULE="ibus"
 export QT_IM_MODULE="ibus"
 export DefaultIMModule=ibus
 ibus-daemon -drxR
+
+# Android Studio
+export ANDROID_HOME="$HOME/Android/Sdk"
+export ANDROID_SDK_ROOT="$HOME/Android/Sdk"
+PATH=$PATH:$ANDROID_SDK_ROOT/tools; PATH=$PATH:$ANDROID_SDK_ROOT/platform-tools
