@@ -280,3 +280,7 @@ export SUDO_PROMPT=$'\e[33mPassword:\e[0m '                     # Make the sudo 
 source /usr/share/nvm/nvm.sh
 source /usr/share/nvm/bash_completion
 source /usr/share/nvm/install-nvm-exec
+
+## Powerline
+#powerline-daemon -q
+#source /usr/share/powerline/bindings/zsh/powerline.zsh
