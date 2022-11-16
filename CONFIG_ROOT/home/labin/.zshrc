@@ -49,7 +49,7 @@ alias free="free -m"                                            # Show sizes in 
 
 # package manager
 # alias to generate and save mirrorlist for pacman
-alias pmrefresh='sudo reflector --country China --country Japan --age 24 --protocol https --sort rate --save /etc/pacman.d/mirrorlist'
+alias pmrefresh='sudo reflector --country 'GB,DE' --age 24 --protocol https --sort rate --save /etc/pacman.d/mirrorlist'
 
 
 # sql clients
