@@ -226,7 +226,7 @@ export HISTCONTROL=ignoreboth:erasedups
 ### Prompt ###
 autoload -U promptinit; promptinit
 prompt spaceship                                                # Install it from the AUR (spaceship-prompt-git)
-spaceship_vi_mode_disable                                       # Pretty explicit
+#spaceship_vi_mode_disable                                       # Pretty explicit
 SPACESHIP_EXEC_TIME_SHOW=true                                   # Enable showing the execution time of last command
 SPACESHIP_DIR_TRUNC=1
 setopt prompt_subst                                             # Enable substitution for prompt
