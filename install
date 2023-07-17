@@ -8,6 +8,8 @@ GITHUB_REPO="dotfiles"
 USER_GIT_AUTHOR_NAME="Labin Ojha"
 USER_GIT_AUTHOR_EMAIL="leabstrait@gmail.com"
 DOTFILES_DIR="${HOME}/${GITHUB_REPO}"
+CONFIG_ROOT="$DOTFILES_DIR/configs/$(cat CONFIG_ROOT)"
+echo $CONFIG_ROOT
 
 _process() {
   echo "$(date) PROCESSING:  $@" >>$DOTFILES_INSTALL_LOG
@@ -267,13 +269,13 @@ add_user_to_groups() {
 
 link_dotfiles() {
   # symlink files to the ROOT(/) directory.
-  if [[ -d "${DOTFILES_DIR}/CONFIG_ROOT" ]]; then
-    _process "→ Symlinking dotfiles in $DOTFILES_DIR/CONFIG_ROOT"
+  if [[ -d $CONFIG_ROOT ]]; then
+    _process "→ Symlinking dotfiles in $CONFIG_ROOT"
 
-    find "${DOTFILES_DIR}/CONFIG_ROOT" -type f -not -name "*.bak" | while read config_file; do
+    find $CONFIG_ROOT -type f -not -name "*.bak" | while read config_file; do
       _process "→ Linking ${config_file}"
-
-      filename=${config_file#"$DOTFILES_DIR/CONFIG_ROOT"}
+	exit
+      filename=${config_file#"$CONFIG_ROOT"}
       if [[ ! -L "$filename" ]]; then
         if [ $filename = ${filename#"$HOME"} ]; then
           sudo mkdir -p "$(dirname "$filename")"
@@ -299,14 +301,14 @@ install() {
   # start with a clean logfile
   echo >"${DOTFILES_INSTALL_LOG}"
 
-  clone_dotfiles
-  setup_ssh
-  setup_git
-  install_paru
-  install_packages
-  install_vscode_extensions
-  install_pictures
-  enable_services
+#  clone_dotfiles
+#  setup_ssh
+#  setup_git
+#  install_paru
+#  install_packages
+#  install_vscode_extensions
+#  install_pictures
+#  enable_services
   link_dotfiles
 }
 

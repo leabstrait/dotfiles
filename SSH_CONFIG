@@ -1,0 +1,19 @@
+Host *
+  LogLevel INFO
+  StrictHostKeyChecking no
+  UserKnownHostsFile=/dev/null
+  LogLevel quiet
+  ForwardAgent yes
+  ForwardX11 no
+  ForwardX11Trusted no
+  IdentityFile ~/.ssh/id_rsa
+  ServerAliveInterval 60
+  ServerAliveCountMax 3
+  TCPKeepAlive yes
+  TCPKeepAliveIdle 60
+  TCPKeepAliveInterval 60
+  TCPKeepAliveCount 3
+  Compression yes
+  CompressionLevel 6
+  CompressionMinCompressSize 100
+  CompressionDelay yes
