@@ -38,7 +38,8 @@
         "editor.lineHighlightBorder": "#9fced11f"
     },
     "[python]": {
-        "editor.defaultFormatter": "ms-python.python"
+        "editor.defaultFormatter": "ms-python.black-formatter",
+        "editor.formatOnType": true
     },
     "[javascript]": {
         "editor.defaultFormatter": "esbenp.prettier-vscode"
@@ -78,10 +79,11 @@
     "git.pruneOnFetch": true,
     "git.fetchOnPull": true,
     "github.copilot.enable": {
-        "*": true,
-        "yaml": false,
+        "*": false,
+        "yaml": true,
         "plaintext": true,
         "markdown": true,
+        "scminput": true,
         "python": true
     },
     "editor.formatOnPaste": true,
@@ -137,5 +139,63 @@
     "terminal.integrated.cursorBlinking": true,
     "terminal.integrated.enablePersistentSessions": false,
     "editor.find.autoFindInSelection": "multiline",
-    "window.zoomLevel": -1.5
+    "svelte.enable-ts-plugin": true,
+    "[svelte]": {
+        "editor.defaultFormatter": "svelte.svelte-vscode"
+    },
+    "window.zoomLevel": -1.5,
+    "files.autoSave": "afterDelay",
+    "editor.mouseWheelZoom": true,
+    "editor.formatOnSaveMode": "modificationsIfAvailable",
+    "terminal.integrated.defaultProfile.windows": "Git Bash",
+    "javascript.suggest.paths": false,
+    "typescript.suggest.paths": false,
+    "colorize.languages": [
+        "css",
+        "sass",
+        "scss",
+        "less",
+        "postcss",
+        "sss",
+        "stylus",
+        "xml",
+        "svg"
+    ],
+    "[typescript]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "notebook.lineNumbers": "on",
+    "notebook.cellToolbarLocation": {
+        "default": "right",
+        "jupyter-notebook": "right"
+    },
+    "yaml.customTags": [
+        "!And",
+        "!And sequence",
+        "!If",
+        "!If sequence",
+        "!Not",
+        "!Not sequence",
+        "!Equals",
+        "!Equals sequence",
+        "!Or",
+        "!Or sequence",
+        "!FindInMap",
+        "!FindInMap sequence",
+        "!Base64",
+        "!Join",
+        "!Join sequence",
+        "!Cidr",
+        "!Ref",
+        "!Sub",
+        "!Sub sequence",
+        "!GetAtt",
+        "!GetAZs",
+        "!ImportValue",
+        "!ImportValue sequence",
+        "!Select",
+        "!Select sequence",
+        "!Split",
+        "!Split sequence"
+    ]
 }
