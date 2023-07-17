@@ -224,12 +224,15 @@ export LESS_TERMCAP_us=$'\E[04;33m'                             # Start underlin
 export HISTCONTROL=ignoreboth:erasedups
 
 ### Prompt ###
-autoload -U promptinit; promptinit
-prompt spaceship                                                # Install it from the AUR (spaceship-prompt-git)
-#spaceship_vi_mode_disable                                       # Pretty explicit
-SPACESHIP_EXEC_TIME_SHOW=true                                   # Enable showing the execution time of last command
-SPACESHIP_DIR_TRUNC=1
-setopt prompt_subst                                             # Enable substitution for prompt
+#autoload -U promptinit; promptinit
+#prompt spaceship                                                # Install it from the AUR (spaceship-prompt-git)
+##spaceship_vi_mode_disable                                       # Pretty explicit
+#SPACESHIP_EXEC_TIME_SHOW=true                                   # Enable showing the execution time of last command
+#SPACESHIP_DIR_TRUNC=1
+#setopt prompt_subst                                             # Enable substitution for prompt
+
+eval "$(starship init zsh)"
+
 
 ### Auto-completion ###
 zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z}'       # Case insensitive tab completion
