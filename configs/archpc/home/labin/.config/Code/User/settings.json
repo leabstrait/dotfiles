@@ -1,0 +1,201 @@
+{
+    "editor.renderControlCharacters": true,
+    "files.trimTrailingWhitespace": true,
+    "workbench.colorTheme": "GitHub Light",
+    "editor.fontFamily": "FiraCode Nerd Font",
+    "editor.fontLigatures": true,
+    "terminal.integrated.fontFamily": "FiraCode Nerd Font",
+    "debug.console.fontFamily": "FiraCode Nerd Font",
+    "files.associations": {
+        "*.djhtml": "html"
+    },
+    "[html]": {
+        "editor.defaultFormatter": "vscode.html-language-features"
+    },
+    "prettier.tabWidth": 4,
+    "workbench.colorCustomizations": {
+        "terminal.background": "#f6f8fa",
+        "terminal.foreground": "#373b41",
+        "terminalCursor.background": "#f6f8fa",
+        "terminalCursor.foreground": "#373b41",
+        "terminal.ansiBlack": "#000000",
+        "terminal.ansiRed": "#cc342b",
+        "terminal.ansiGreen": "#2eb398",
+        "terminal.ansiYellow": "#c0aa05",
+        "terminal.ansiBlue": "#3971ed",
+        "terminal.ansiMagenta": "#a36ac7",
+        "terminal.ansiCyan": "#3971ed",
+        "terminal.ansiWhite": "#373b41",
+        "terminal.ansiBrightBlack": "#000000",
+        "terminal.ansiBrightRed": "#cc342b",
+        "terminal.ansiBrightGreen": "#2eb398",
+        "terminal.ansiBrightYellow": "#ceb604",
+        "terminal.ansiBrightBlue": "#3971ed",
+        "terminal.ansiBrightMagenta": "#a36ac7",
+        "terminal.ansiBrightCyan": "#3971ed",
+        "terminal.ansiBrightWhite": "#000000",
+        "editor.lineHighlightBackground": "#1073cf2d",
+        "editor.lineHighlightBorder": "#9fced11f"
+    },
+    "[python]": {
+        "editor.defaultFormatter": "ms-python.black-formatter",
+        "editor.formatOnType": true
+    },
+    "[javascript]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "files.defaultLanguage": "${activeEditorLanguage}",
+    "files.trimFinalNewlines": true,
+    "workbench.sideBar.location": "right",
+    "editor.linkedEditing": true,
+    "terminal.integrated.profiles.linux": {
+        "vscode-tmux-shell": {
+            "path": "/home/labin/.local/bin/vscode-tmux-shell",
+            "icon": "terminal-tmux"
+        }
+    },
+    "terminal.integrated.defaultProfile.linux": "vscode-tmux-shell",
+    "terminal.integrated.tabs.enabled": true,
+    "terminal.integrated.enableBell": true,
+    "git.untrackedChanges": "separate",
+    "[json]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "workbench.iconTheme": "material-icon-theme",
+    "[vue]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "editor.renderWhitespace": "all",
+    "gitlens.views.commits.files.layout": "tree",
+    "prettier.vueIndentScriptAndStyle": true,
+    "alignment.surroundSpace": {
+        "colon": [0, 1],
+        "assignment": [1, 1],
+        "arrow": [1, 1],
+        "comment": 2
+    },
+    "editor.inlineSuggest.enabled": true,
+    "git.autofetch": true,
+    "git.pruneOnFetch": true,
+    "git.fetchOnPull": true,
+    "github.copilot.enable": {
+        "*": false,
+        "yaml": true,
+        "plaintext": true,
+        "markdown": true,
+        "scminput": true,
+        "python": true
+    },
+    "editor.formatOnPaste": true,
+    "editor.formatOnSave": true,
+    "editor.formatOnType": true,
+    "[dockerfile]": {
+        "editor.defaultFormatter": "ms-azuretools.vscode-docker"
+    },
+    "githubPullRequests.queries": [
+        {
+            "label": "Waiting For My Review",
+            "query": "is:open review-requested:${user}"
+        },
+        {
+            "label": "Assigned To Me",
+            "query": "is:open assignee:${user}"
+        },
+        {
+            "label": "Created By Me",
+            "query": "is:open author:${user}"
+        }
+    ],
+    "gitlens.codeLens.scopes": ["document", "containers", "blocks"],
+    "gitlens.views.repositories.includeWorkingTree": true,
+    "cSpell.enabled": true,
+    "diffEditor.ignoreTrimWhitespace": false,
+    "editor.wordWrap": "off",
+    "diffEditor.wordWrap": "off",
+    "editor.guides.indentation": true,
+    "editor.guides.bracketPairs": "active",
+    "editor.inlayHints.enabled": "on",
+    "[jsonc]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "editor.renderLineHighlight": "all",
+    "workbench.editor.highlightModifiedTabs": true,
+    "workbench.productIconTheme": "material-product-icons",
+    "editor.bracketPairColorization.independentColorPoolPerBracketType": true,
+    "editor.language.brackets": [
+        ["{", "}"],
+        ["[", "]"],
+        ["(", ")"]
+    ],
+    "workbench.tree.renderIndentGuides": "always",
+    "projectManager.git.baseFolders": [
+        "~/work",
+        "~/study",
+        "~/codes",
+        "~/dotfiles"
+    ],
+    "terminal.integrated.copyOnSelection": true,
+    "terminal.external.linuxExec": "alacritty -e vscode-tmux-shell",
+    "terminal.integrated.cursorBlinking": true,
+    "terminal.integrated.enablePersistentSessions": false,
+    "editor.find.autoFindInSelection": "multiline",
+    "svelte.enable-ts-plugin": true,
+    "[svelte]": {
+        "editor.defaultFormatter": "svelte.svelte-vscode"
+    },
+    "window.zoomLevel": -1.5,
+    "files.autoSave": "afterDelay",
+    "editor.mouseWheelZoom": true,
+    "editor.formatOnSaveMode": "modificationsIfAvailable",
+    "terminal.integrated.defaultProfile.windows": "Git Bash",
+    "javascript.suggest.paths": false,
+    "typescript.suggest.paths": false,
+    "colorize.languages": [
+        "css",
+        "sass",
+        "scss",
+        "less",
+        "postcss",
+        "sss",
+        "stylus",
+        "xml",
+        "svg"
+    ],
+    "[typescript]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "notebook.lineNumbers": "on",
+    "notebook.cellToolbarLocation": {
+        "default": "right",
+        "jupyter-notebook": "right"
+    },
+    "yaml.customTags": [
+        "!And",
+        "!And sequence",
+        "!If",
+        "!If sequence",
+        "!Not",
+        "!Not sequence",
+        "!Equals",
+        "!Equals sequence",
+        "!Or",
+        "!Or sequence",
+        "!FindInMap",
+        "!FindInMap sequence",
+        "!Base64",
+        "!Join",
+        "!Join sequence",
+        "!Cidr",
+        "!Ref",
+        "!Sub",
+        "!Sub sequence",
+        "!GetAtt",
+        "!GetAZs",
+        "!ImportValue",
+        "!ImportValue sequence",
+        "!Select",
+        "!Select sequence",
+        "!Split",
+        "!Split sequence"
+    ]
+}
