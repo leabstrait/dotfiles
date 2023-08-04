@@ -1,96 +1,115 @@
 {
-    "editor.renderControlCharacters": true,
-    "files.trimTrailingWhitespace": true,
-    "workbench.colorTheme": "GitHub Light",
-    "editor.fontFamily": "FiraCode Nerd Font",
-    "editor.fontLigatures": true,
-    "terminal.integrated.fontFamily": "FiraCode Nerd Font",
-    "debug.console.fontFamily": "FiraCode Nerd Font",
-    "files.associations": {
-        "*.djhtml": "html"
+    "[dockerfile]": {
+        "editor.defaultFormatter": "ms-azuretools.vscode-docker"
     },
     "[html]": {
         "editor.defaultFormatter": "vscode.html-language-features"
     },
-    "prettier.tabWidth": 4,
-    "workbench.colorCustomizations": {
-        "terminal.background": "#f6f8fa",
-        "terminal.foreground": "#373b41",
-        "terminalCursor.background": "#f6f8fa",
-        "terminalCursor.foreground": "#373b41",
-        "terminal.ansiBlack": "#000000",
-        "terminal.ansiRed": "#cc342b",
-        "terminal.ansiGreen": "#2eb398",
-        "terminal.ansiYellow": "#c0aa05",
-        "terminal.ansiBlue": "#3971ed",
-        "terminal.ansiMagenta": "#a36ac7",
-        "terminal.ansiCyan": "#3971ed",
-        "terminal.ansiWhite": "#373b41",
-        "terminal.ansiBrightBlack": "#000000",
-        "terminal.ansiBrightRed": "#cc342b",
-        "terminal.ansiBrightGreen": "#2eb398",
-        "terminal.ansiBrightYellow": "#ceb604",
-        "terminal.ansiBrightBlue": "#3971ed",
-        "terminal.ansiBrightMagenta": "#a36ac7",
-        "terminal.ansiBrightCyan": "#3971ed",
-        "terminal.ansiBrightWhite": "#000000",
-        "editor.lineHighlightBackground": "#1073cf2d",
-        "editor.lineHighlightBorder": "#9fced11f"
+    "[javascript]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[json]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[jsonc]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[markdown]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
     },
     "[python]": {
         "editor.defaultFormatter": "ms-python.black-formatter",
         "editor.formatOnType": true
     },
-    "[javascript]": {
+    "[svelte]": {
+        "editor.defaultFormatter": "svelte.svelte-vscode"
+    },
+    "[typescript]": {
         "editor.defaultFormatter": "esbenp.prettier-vscode"
     },
-    "files.defaultLanguage": "${activeEditorLanguage}",
-    "files.trimFinalNewlines": true,
-    "workbench.sideBar.location": "right",
-    "editor.linkedEditing": true,
-    "terminal.integrated.profiles.linux": {
-        "vscode-tmux-shell": {
-            "path": "/home/labin/.local/bin/vscode-tmux-shell",
-            "icon": "terminal-tmux"
-        }
-    },
-    "terminal.integrated.defaultProfile.linux": "vscode-tmux-shell",
-    "terminal.integrated.tabs.enabled": true,
-    "terminal.integrated.enableBell": true,
-    "git.untrackedChanges": "separate",
-    "[json]": {
-        "editor.defaultFormatter": "esbenp.prettier-vscode"
-    },
-    "workbench.iconTheme": "material-icon-theme",
     "[vue]": {
         "editor.defaultFormatter": "esbenp.prettier-vscode"
     },
-    "editor.renderWhitespace": "all",
-    "gitlens.views.commits.files.layout": "tree",
-    "prettier.vueIndentScriptAndStyle": true,
     "alignment.surroundSpace": {
-        "colon": [0, 1],
-        "assignment": [1, 1],
-        "arrow": [1, 1],
+        "arrow": [
+            1,
+            1
+        ],
+        "assignment": [
+            1,
+            1
+        ],
+        "colon": [
+            0,
+            1
+        ],
         "comment": 2
     },
-    "editor.inlineSuggest.enabled": true,
-    "git.autofetch": true,
-    "git.pruneOnFetch": true,
-    "git.fetchOnPull": true,
-    "github.copilot.enable": {
-        "*": false,
-        "yaml": true,
-        "plaintext": true,
-        "markdown": true,
-        "scminput": true,
-        "python": true
-    },
+    "colorize.languages": [
+        "css",
+        "sass",
+        "scss",
+        "less",
+        "postcss",
+        "sss",
+        "stylus",
+        "xml",
+        "svg"
+    ],
+    "cSpell.enabled": true,
+    "debug.console.fontFamily": "FiraCode Nerd Font",
+    "diffEditor.ignoreTrimWhitespace": false,
+    "diffEditor.wordWrap": "off",
+    "editor.bracketPairColorization.independentColorPoolPerBracketType": true,
+    "editor.find.autoFindInSelection": "multiline",
+    "editor.fontFamily": "FiraCode Nerd Font",
+    "editor.fontLigatures": true,
     "editor.formatOnPaste": true,
     "editor.formatOnSave": true,
+    "editor.formatOnSaveMode": "modificationsIfAvailable",
     "editor.formatOnType": true,
-    "[dockerfile]": {
-        "editor.defaultFormatter": "ms-azuretools.vscode-docker"
+    "editor.guides.bracketPairs": "active",
+    "editor.guides.indentation": true,
+    "editor.inlayHints.enabled": "on",
+    "editor.inlineSuggest.enabled": true,
+    "editor.language.brackets": [
+        [
+            "{",
+            "}"
+        ],
+        [
+            "[",
+            "]"
+        ],
+        [
+            "(",
+            ")"
+        ]
+    ],
+    "editor.linkedEditing": true,
+    "editor.mouseWheelZoom": true,
+    "editor.renderControlCharacters": true,
+    "editor.renderLineHighlight": "all",
+    "editor.renderWhitespace": "all",
+    "editor.wordWrap": "off",
+    "files.associations": {
+        "*.djhtml": "html"
+    },
+    "files.autoSave": "afterDelay",
+    "files.defaultLanguage": "${activeEditorLanguage}",
+    "files.trimFinalNewlines": true,
+    "files.trimTrailingWhitespace": true,
+    "git.autofetch": true,
+    "git.fetchOnPull": true,
+    "git.pruneOnFetch": true,
+    "git.untrackedChanges": "separate",
+    "github.copilot.enable": {
+        "*": false,
+        "markdown": true,
+        "plaintext": true,
+        "python": true,
+        "scminput": true,
+        "yaml": true
     },
     "githubPullRequests.queries": [
         {
@@ -106,69 +125,80 @@
             "query": "is:open author:${user}"
         }
     ],
-    "gitlens.codeLens.scopes": ["document", "containers", "blocks"],
-    "gitlens.views.repositories.includeWorkingTree": true,
-    "cSpell.enabled": true,
-    "diffEditor.ignoreTrimWhitespace": false,
-    "editor.wordWrap": "off",
-    "diffEditor.wordWrap": "off",
-    "editor.guides.indentation": true,
-    "editor.guides.bracketPairs": "active",
-    "editor.inlayHints.enabled": "on",
-    "[jsonc]": {
-        "editor.defaultFormatter": "esbenp.prettier-vscode"
-    },
-    "editor.renderLineHighlight": "all",
-    "workbench.editor.highlightModifiedTabs": true,
-    "workbench.productIconTheme": "material-product-icons",
-    "editor.bracketPairColorization.independentColorPoolPerBracketType": true,
-    "editor.language.brackets": [
-        ["{", "}"],
-        ["[", "]"],
-        ["(", ")"]
+    "gitlens.codeLens.scopes": [
+        "document",
+        "containers",
+        "blocks"
     ],
-    "workbench.tree.renderIndentGuides": "always",
+    "gitlens.views.commits.files.layout": "tree",
+    "gitlens.views.repositories.includeWorkingTree": true,
+    "javascript.suggest.paths": false,
+    "markdown.copyFiles.destination": {
+        "*": "files/${documentBaseName}/"
+    },
+    "markdown.editor.filePaste.copyIntoWorkspace": "mediaFiles",
+    "markdown.editor.pasteUrlAsFormattedLink.enabled": true,
+    "notebook.cellToolbarLocation": {
+        "default": "right",
+        "jupyter-notebook": "right"
+    },
+    "notebook.lineNumbers": "on",
+    "prettier.tabWidth": 4,
+    "prettier.vueIndentScriptAndStyle": true,
     "projectManager.git.baseFolders": [
         "~/work",
         "~/study",
         "~/codes",
         "~/dotfiles"
     ],
-    "terminal.integrated.copyOnSelection": true,
-    "terminal.external.linuxExec": "alacritty -e vscode-tmux-shell",
-    "terminal.integrated.cursorBlinking": true,
-    "terminal.integrated.enablePersistentSessions": false,
-    "editor.find.autoFindInSelection": "multiline",
     "svelte.enable-ts-plugin": true,
-    "[svelte]": {
-        "editor.defaultFormatter": "svelte.svelte-vscode"
-    },
-    "window.zoomLevel": -1.5,
-    "files.autoSave": "afterDelay",
-    "editor.mouseWheelZoom": true,
-    "editor.formatOnSaveMode": "modificationsIfAvailable",
+    "terminal.external.linuxExec": "alacritty -e vscode-tmux-shell",
+    "terminal.integrated.copyOnSelection": true,
+    "terminal.integrated.cursorBlinking": true,
+    "terminal.integrated.defaultProfile.linux": "vscode-tmux-shell",
     "terminal.integrated.defaultProfile.windows": "Git Bash",
-    "javascript.suggest.paths": false,
+    "terminal.integrated.enableBell": true,
+    "terminal.integrated.enablePersistentSessions": false,
+    "terminal.integrated.fontFamily": "FiraCode Nerd Font",
+    "terminal.integrated.profiles.linux": {
+        "vscode-tmux-shell": {
+            "icon": "terminal-tmux",
+            "path": "/home/labin/.local/bin/vscode-tmux-shell"
+        }
+    },
+    "terminal.integrated.tabs.enabled": true,
     "typescript.suggest.paths": false,
-    "colorize.languages": [
-        "css",
-        "sass",
-        "scss",
-        "less",
-        "postcss",
-        "sss",
-        "stylus",
-        "xml",
-        "svg"
-    ],
-    "[typescript]": {
-        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    "window.zoomLevel": -1.5,
+    "workbench.colorCustomizations": {
+        "editor.lineHighlightBackground": "#1073cf2d",
+        "editor.lineHighlightBorder": "#9fced11f",
+        "terminal.ansiBlack": "#000000",
+        "terminal.ansiBlue": "#3971ed",
+        "terminal.ansiBrightBlack": "#000000",
+        "terminal.ansiBrightBlue": "#3971ed",
+        "terminal.ansiBrightCyan": "#3971ed",
+        "terminal.ansiBrightGreen": "#2eb398",
+        "terminal.ansiBrightMagenta": "#a36ac7",
+        "terminal.ansiBrightRed": "#cc342b",
+        "terminal.ansiBrightWhite": "#000000",
+        "terminal.ansiBrightYellow": "#ceb604",
+        "terminal.ansiCyan": "#3971ed",
+        "terminal.ansiGreen": "#2eb398",
+        "terminal.ansiMagenta": "#a36ac7",
+        "terminal.ansiRed": "#cc342b",
+        "terminal.ansiWhite": "#373b41",
+        "terminal.ansiYellow": "#c0aa05",
+        "terminal.background": "#f6f8fa",
+        "terminal.foreground": "#373b41",
+        "terminalCursor.background": "#f6f8fa",
+        "terminalCursor.foreground": "#373b41"
     },
-    "notebook.lineNumbers": "on",
-    "notebook.cellToolbarLocation": {
-        "default": "right",
-        "jupyter-notebook": "right"
-    },
+    "workbench.colorTheme": "GitHub Light",
+    "workbench.editor.highlightModifiedTabs": true,
+    "workbench.iconTheme": "material-icon-theme",
+    "workbench.productIconTheme": "material-product-icons",
+    "workbench.sideBar.location": "right",
+    "workbench.tree.renderIndentGuides": "always",
     "yaml.customTags": [
         "!And",
         "!And sequence",
