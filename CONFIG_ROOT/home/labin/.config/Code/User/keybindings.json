@@ -1,23 +1,23 @@
 // Place your key bindings in this file to override the defaultsauto[]
 [
     {
-        "key": "ctrl+k space",
         "command": "github.copilot.generate",
+        "key": "ctrl+k space",
         "when": "editorTextFocus && github.copilot.activated"
     },
     {
-        "key": "ctrl+enter",
         "command": "-github.copilot.generate",
+        "key": "ctrl+enter",
         "when": "editorTextFocus && github.copilot.activated"
     },
     {
-        "key": "ctrl+shift+/",
         "command": "editor.action.blockComment",
+        "key": "ctrl+shift+/",
         "when": "editorTextFocus && !editorReadonly"
     },
     {
-        "key": "ctrl+shift+a",
         "command": "-editor.action.blockComment",
+        "key": "ctrl+shift+a",
         "when": "editorTextFocus && !editorReadonly"
     }
 ]
