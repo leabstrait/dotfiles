@@ -47,3 +47,4 @@ recommit-edit = commit --amend
 
 clean-merged-local = !git fetch -ap && git branch --merged | grep -Ev '^[[:blank:]]*(\\*|main|master|dev)' | xargs -tpr -n 1 git branch -d
 clean-merged-remote = !git fetch -ap && git branch -r --merged | grep -Ev '(\\*|/main|/master|/dev)' | sed -e 's/\\//\\ /' | xargs -tpr -n 2 git push -d
+merge-test = !git merge --no-commit --no-ff $@ || echo "Run \\'git merge --abort\\' if you don\\'t want to commit the changes from merging"
