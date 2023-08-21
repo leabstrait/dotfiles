@@ -63,20 +63,6 @@ source $HOME/dotfiles/dotfiles.sh
 source $HOME/notes/notes.sh
 
 
-## Functions to load and unload environment variables from an .env file
-# Load variable specified in .env file into the current shell
-function loadenv() {
-    set -o allexport
-        [ "$#" -eq 1 ] && env="$1" || env=".env"
-        [ -f "$env" ] && { echo "Env file $env exists, Sourcing..."; } || { return 1; }
-        source <(cat "$env" \
-            | sed -e '/^#/d;/^\s*$/d' \
-            | sed -e "s/'/'\\\''/g" \
-            | sed -e "s/=\(.*\)/='\1'/g" \
-        ) && "$@"
-    set +o allexport
-}
-
 # Run loadenv on shell start
 # loadenv
 # Run loadenv on every new directory
@@ -85,13 +71,6 @@ cd () {
   loadenv
 }
 
-# Unset variables specified in the .env if it exists
-function unloadenv() {
-    if [ -f .env ];
-    then
-        unset $(grep -v '^#' .env | sed -E 's/(.*)=.*/\1/' | xargs)
-    fi
-}
 
 
 ### Theming ###

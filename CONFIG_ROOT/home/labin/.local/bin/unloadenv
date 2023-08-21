@@ -1,0 +1,7 @@
+# Unset variables specified in the .env if it exists
+function unloadenv() {
+    if [ -f .env ]; then
+        unset $(grep -v '^#' .env | sed -E 's/(.*)=.*/\1/' | xargs)
+    fi
+}
+unloadenv
