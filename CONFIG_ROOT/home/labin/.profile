@@ -1,4 +1,4 @@
-export EDITOR=nano
+export EDITOR=code
 export TERMINAL=alacritty
 export QT_QPA_PLATFORMTHEME="qt5ct"
 export QT_AUTO_SCREEN_SCALE_FACTOR=0
@@ -34,4 +34,5 @@ ibus-daemon -drxR
 # Android Studio
 export ANDROID_HOME="$HOME/Android/Sdk"
 export ANDROID_SDK_ROOT="$HOME/Android/Sdk"
-PATH=$PATH:$ANDROID_SDK_ROOT/tools; PATH=$PATH:$ANDROID_SDK_ROOT/platform-tools
+PATH=$PATH:$ANDROID_SDK_ROOT/tools
+PATH=$PATH:$ANDROID_SDK_ROOT/platform-tools
