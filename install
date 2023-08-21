@@ -8,6 +8,8 @@ GITHUB_REPO="dotfiles"
 USER_GIT_AUTHOR_NAME="Labin Ojha"
 USER_GIT_AUTHOR_EMAIL="leabstrait@gmail.com"
 DOTFILES_DIR="${HOME}/${GITHUB_REPO}"
+CONFIG_ROOT="$DOTFILES_DIR/configs/$(cat CONFIG_ROOT)"
+echo $CONFIG_ROOT
 
 if [ ! -f "$DOTFILES_DIR/CONFIG_ROOT" ]; then
   echo "Need the CONFIG_ROOT file!"
@@ -306,14 +308,14 @@ install() {
   # start with a clean logfile
   echo >"${DOTFILES_INSTALL_LOG}"
 
-  clone_dotfiles
-  setup_ssh
-  setup_git
-  install_paru
-  install_packages
-  install_vscode_extensions
-  install_pictures
-  enable_services
+#  clone_dotfiles
+#  setup_ssh
+#  setup_git
+#  install_paru
+#  install_packages
+#  install_vscode_extensions
+#  install_pictures
+#  enable_services
   link_dotfiles
 }
 
