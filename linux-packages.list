@@ -1,15 +1,15 @@
+act-bin
 adobe-source-han-fonts
 adobe-source-pro-fonts
 adwaita-qt5
 alacritty
 alsa-card-profiles
-android-sdk
-android-studio
 android-tools
 appstream-glib
 base
 base-devel
 bc
+bind
 blueman
 bluez-utils
 boost
@@ -40,6 +40,7 @@ gcolor2
 geocode-glib
 git-extras
 git-quick-stats
+glibmm-2.68
 gperf
 grub
 gtest
@@ -79,6 +80,7 @@ nmap
 nvidia-390xx-dkms
 nvm
 openssl-1.1
+pandoc-cli
 papirus-icon-theme
 paru
 perl-file-which
@@ -91,7 +93,6 @@ powerline-shell
 python-appdirs
 python-backports.csv
 python-bcrypt
-python-black
 python-blessings
 python-cherrypy
 python-clikit
@@ -102,6 +103,7 @@ python-defusedxml
 python-distutils-extra
 python-elasticsearch
 python-entrypoints
+python-exceptiongroup
 python-flask-restful
 python-google-api-python-client
 python-hypothesis
@@ -125,7 +127,6 @@ python-pylint
 python-pytest-cov
 python-rapidfuzz-capi
 python-resolvelib
-python-rich
 python-scikit-build
 python-scikit-learn
 python-sphinx
@@ -147,6 +148,7 @@ starship
 sysfsutils
 tcpdump
 telegram-desktop
+termshark
 texlive-bibtexextra
 texlive-binextra
 texlive-context
@@ -173,6 +175,7 @@ unicode-emoji
 valgrind
 viewnior
 visual-studio-code-bin
+wireshark-qt
 xclip
 xcursor-breeze
 xdg-user-dirs
