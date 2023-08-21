@@ -1,0 +1,11 @@
+#!/bin/zsh
+
+# if tmux is executable, X is running, and not inside a tmux session, then try to attach.
+# if attaching fails, start a new session
+
+if [ -x "$(command -v tmux)" ]; then 
+    [ -z "$TMUX" ] && {
+        tmux attach-session -d -t home -c "$HOME" ||
+            exec tmux new-session -s home -c "$HOME" && exit
+    } >/dev/null 2>&1
+fi
