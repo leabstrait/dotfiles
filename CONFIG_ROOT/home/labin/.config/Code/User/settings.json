@@ -14,6 +14,9 @@
     "[jsonc]": {
         "editor.defaultFormatter": "esbenp.prettier-vscode"
     },
+    "[latex]": {
+        "editor.defaultFormatter": "James-Yu.latex-workshop"
+    },
     "[markdown]": {
         "editor.defaultFormatter": "esbenp.prettier-vscode"
     },
@@ -31,18 +34,9 @@
         "editor.defaultFormatter": "esbenp.prettier-vscode"
     },
     "alignment.surroundSpace": {
-        "arrow": [
-            1,
-            1
-        ],
-        "assignment": [
-            1,
-            1
-        ],
-        "colon": [
-            0,
-            1
-        ],
+        "arrow": [1, 1],
+        "assignment": [1, 1],
+        "colon": [0, 1],
         "comment": 2
     },
     "colorize.languages": [
@@ -73,18 +67,9 @@
     "editor.inlayHints.enabled": "on",
     "editor.inlineSuggest.enabled": true,
     "editor.language.brackets": [
-        [
-            "{",
-            "}"
-        ],
-        [
-            "[",
-            "]"
-        ],
-        [
-            "(",
-            ")"
-        ]
+        ["{", "}"],
+        ["[", "]"],
+        ["(", ")"]
     ],
     "editor.linkedEditing": true,
     "editor.mouseWheelZoom": true,
@@ -125,11 +110,7 @@
             "query": "is:open author:${user}"
         }
     ],
-    "gitlens.codeLens.scopes": [
-        "document",
-        "containers",
-        "blocks"
-    ],
+    "gitlens.codeLens.scopes": ["document", "containers", "blocks"],
     "gitlens.views.commits.files.layout": "tree",
     "gitlens.views.repositories.includeWorkingTree": true,
     "javascript.suggest.paths": false,
@@ -137,6 +118,7 @@
         "*": "files/${documentBaseName}/"
     },
     "markdown.editor.filePaste.copyIntoWorkspace": "mediaFiles",
+    "markdown.editor.pasteUrlAsFormattedLink.enabled": true,
     "markdown.editor.pasteUrlAsFormattedLink.enabled": true,
     "notebook.cellToolbarLocation": {
         "default": "right",
@@ -149,7 +131,8 @@
         "~/work",
         "~/study",
         "~/codes",
-        "~/dotfiles"
+        "~/dotfiles",
+        "~/notes"
     ],
     "svelte.enable-ts-plugin": true,
     "terminal.external.linuxExec": "alacritty -e vscode-tmux-shell",
@@ -168,7 +151,6 @@
     },
     "terminal.integrated.tabs.enabled": true,
     "typescript.suggest.paths": false,
-    "window.zoomLevel": -1.5,
     "workbench.colorCustomizations": {
         "editor.lineHighlightBackground": "#1073cf2d",
         "editor.lineHighlightBorder": "#9fced11f",
@@ -196,6 +178,7 @@
     "workbench.colorTheme": "GitHub Light",
     "workbench.editor.highlightModifiedTabs": true,
     "workbench.iconTheme": "material-icon-theme",
+    "workbench.productIconTheme": "material-product-icons",
     "workbench.productIconTheme": "material-product-icons",
     "workbench.sideBar.location": "right",
     "workbench.tree.renderIndentGuides": "always",
@@ -227,5 +210,12 @@
         "!Select sequence",
         "!Split",
         "!Split sequence"
-    ]
+    ],
+    "remote.tunnels.access.preventSleep": true,
+    "remote.tunnels.alwaysUpdateCLI": true,
+    "grammarly.files.include": ["**/*.md", "**/*.txt", "**/*.tex"],
+    "[bibtex]": {
+        "editor.defaultFormatter": "James-Yu.latex-workshop"
+    },
+    "window.zoomLevel": -1.5
 }
