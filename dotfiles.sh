@@ -1,6 +1,16 @@
 ## Manage dotfiles with the dotfiles function
 function dotfiles() {
     DOTFILES_DIR="$HOME/dotfiles"
+
+    if [ ! -f "$DOTFILES_DIR/CONFIG_ROOT" ]; then
+        echo "Need the CONFIG_ROOT file!"
+        return
+    fi
+
+
+    CONFIG_ROOT="$HOME/dotfiles/configs/$(cat "$DOTFILES_DIR/CONFIG_ROOT")"
+    echo $CONFIG_ROOT
+
     # check if the function is provided with arguments
     if [ $# -eq 0 ]; then
         echo "Usage: dotfiles ( <command> <file> | <git commands> )"
@@ -36,16 +46,16 @@ function dotfiles() {
         if [ $command = "track" ]; then
             # check if the file path is prefixed with the dotfiles directory
             if [[ ! $file =~ ^$DOTFILES_DIR ]]; then
-                mkdir -p $DOTFILES_DIR/CONFIG_ROOT$(dirname $file)
-                cp $file $DOTFILES_DIR/CONFIG_ROOT$file
+                mkdir -p $CONFIG_ROOT$(dirname $file)
+                cp $file $CONFIG_ROOT$file
                 # create a symlink to the dotfiles directory
                 # if file is not in home directory, require sudo access
                 if [ $file = ${file#"$HOME"} ]; then
                     # sudo mv $file $DOTFILES_DIR/CONFIG_ROOT$file.bak
-                    sudo ln -sfv $DOTFILES_DIR/CONFIG_ROOT$file $file
+                    sudo ln -sfv $CONFIG_ROOT$file $file
                 else
                     # mv $file $DOTFILES_DIR/CONFIG_ROOT$file.bak
-                    ln -sfv $DOTFILES_DIR/CONFIG_ROOT$file $file
+                    ln -sfv $CONFIG_ROOT$file $file
                 fi
             else
                 echo "File $file is already tracked in the dotfiles directory"
@@ -53,7 +63,7 @@ function dotfiles() {
         fi
 
         if [ $command = "untrack" ]; then
-            local tracked_file_orig_path=${file#"$DOTFILES_DIR/CONFIG_ROOT"}
+            local tracked_file_orig_path=${file#"$CONFIG_ROOT"}
             if [ -L $tracked_file_orig_path ]; then
                 # move the file from the dotfiles directory into the original
                 # directory preserving its path and name (if it exists)
