@@ -21,7 +21,7 @@
         "editor.defaultFormatter": "esbenp.prettier-vscode"
     },
     "[python]": {
-        "editor.defaultFormatter": "ms-python.black-formatter",
+        "editor.defaultFormatter": "ms-python.python",
         "editor.formatOnType": true
     },
     "[svelte]": {
@@ -217,5 +217,6 @@
     "[bibtex]": {
         "editor.defaultFormatter": "James-Yu.latex-workshop"
     },
-    "window.zoomLevel": -1.5
+    "window.zoomLevel": -1.5,
+    "terminal.integrated.allowChords": false
 }
