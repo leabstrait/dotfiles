@@ -5,6 +5,7 @@ After=graphical.target
 [Service]
 Type=simple
 ExecStart=%h/.config/conky/startconky.sh
+Environment="DISPLAY=:0"
 Restart=always
 
 [Install]
