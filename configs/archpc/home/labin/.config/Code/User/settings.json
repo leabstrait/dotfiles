@@ -1,4 +1,7 @@
 {
+    "[bibtex]": {
+        "editor.defaultFormatter": "James-Yu.latex-workshop"
+    },
     "[dockerfile]": {
         "editor.defaultFormatter": "ms-azuretools.vscode-docker"
     },
@@ -21,7 +24,7 @@
         "editor.defaultFormatter": "esbenp.prettier-vscode"
     },
     "[python]": {
-        "editor.defaultFormatter": "ms-python.python",
+        "editor.defaultFormatter": "ms-python.black-formatter",
         "editor.formatOnType": true
     },
     "[svelte]": {
@@ -34,11 +37,22 @@
         "editor.defaultFormatter": "esbenp.prettier-vscode"
     },
     "alignment.surroundSpace": {
-        "arrow": [1, 1],
-        "assignment": [1, 1],
-        "colon": [0, 1],
+        "arrow": [
+            1,
+            1
+        ],
+        "assignment": [
+            1,
+            1
+        ],
+        "colon": [
+            0,
+            1
+        ],
         "comment": 2
     },
+    "blockman.n04ColorComboPreset": "Classic Light (Gradients)",
+    "cloudcode.autoDependencies": "off",
     "colorize.languages": [
         "css",
         "sass",
@@ -62,14 +76,24 @@
     "editor.formatOnSave": true,
     "editor.formatOnSaveMode": "modificationsIfAvailable",
     "editor.formatOnType": true,
-    "editor.guides.bracketPairs": "active",
-    "editor.guides.indentation": true,
-    "editor.inlayHints.enabled": "on",
+    "editor.guides.bracketPairs": "false",
+    "editor.guides.indentation": false,
+    "editor.inlayHints.enabled": "off",
     "editor.inlineSuggest.enabled": true,
+    "editor.inlineSuggest.showToolbar": "always",
     "editor.language.brackets": [
-        ["{", "}"],
-        ["[", "]"],
-        ["(", ")"]
+        [
+            "{",
+            "}"
+        ],
+        [
+            "[",
+            "]"
+        ],
+        [
+            "(",
+            ")"
+        ]
     ],
     "editor.linkedEditing": true,
     "editor.mouseWheelZoom": true,
@@ -110,12 +134,21 @@
             "query": "is:open author:${user}"
         }
     ],
-    "gitlens.codeLens.scopes": ["document", "containers", "blocks"],
+    "gitlens.codeLens.scopes": [
+        "document",
+        "containers",
+        "blocks"
+    ],
     "gitlens.views.commits.files.layout": "tree",
     "gitlens.views.repositories.includeWorkingTree": true,
+    "grammarly.files.include": [
+        "**/*.md",
+        "**/*.txt",
+        "**/*.tex"
+    ],
     "javascript.suggest.paths": false,
     "markdown.copyFiles.destination": {
-        "*": "files/${documentBaseName}/"
+        "*": "${documentBaseName}/"
     },
     "markdown.editor.filePaste.copyIntoWorkspace": "mediaFiles",
     "markdown.editor.pasteUrlAsFormattedLink.enabled": true,
@@ -134,8 +167,12 @@
         "~/dotfiles",
         "~/notes"
     ],
+    "python.formatting.provider": "none",
+    "remote.tunnels.access.preventSleep": true,
+    "remote.tunnels.alwaysUpdateCLI": true,
     "svelte.enable-ts-plugin": true,
     "terminal.external.linuxExec": "alacritty -e vscode-tmux-shell",
+    "terminal.integrated.allowChords": false,
     "terminal.integrated.copyOnSelection": true,
     "terminal.integrated.cursorBlinking": true,
     "terminal.integrated.defaultProfile.linux": "vscode-tmux-shell",
@@ -151,6 +188,7 @@
     },
     "terminal.integrated.tabs.enabled": true,
     "typescript.suggest.paths": false,
+    "window.zoomLevel": -1.5,
     "workbench.colorCustomizations": {
         "editor.lineHighlightBackground": "#1073cf2d",
         "editor.lineHighlightBorder": "#9fced11f",
@@ -210,13 +248,5 @@
         "!Select sequence",
         "!Split",
         "!Split sequence"
-    ],
-    "remote.tunnels.access.preventSleep": true,
-    "remote.tunnels.alwaysUpdateCLI": true,
-    "grammarly.files.include": ["**/*.md", "**/*.txt", "**/*.tex"],
-    "[bibtex]": {
-        "editor.defaultFormatter": "James-Yu.latex-workshop"
-    },
-    "window.zoomLevel": -1.5,
-    "terminal.integrated.allowChords": false
+    ]
 }
