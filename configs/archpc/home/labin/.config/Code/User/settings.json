@@ -37,18 +37,9 @@
         "editor.defaultFormatter": "esbenp.prettier-vscode"
     },
     "alignment.surroundSpace": {
-        "arrow": [
-            1,
-            1
-        ],
-        "assignment": [
-            1,
-            1
-        ],
-        "colon": [
-            0,
-            1
-        ],
+        "arrow": [1, 1],
+        "assignment": [1, 1],
+        "colon": [0, 1],
         "comment": 2
     },
     "blockman.n04ColorComboPreset": "Classic Light (Gradients)",
@@ -82,18 +73,9 @@
     "editor.inlineSuggest.enabled": true,
     "editor.inlineSuggest.showToolbar": "always",
     "editor.language.brackets": [
-        [
-            "{",
-            "}"
-        ],
-        [
-            "[",
-            "]"
-        ],
-        [
-            "(",
-            ")"
-        ]
+        ["{", "}"],
+        ["[", "]"],
+        ["(", ")"]
     ],
     "editor.linkedEditing": true,
     "editor.mouseWheelZoom": true,
@@ -134,18 +116,10 @@
             "query": "is:open author:${user}"
         }
     ],
-    "gitlens.codeLens.scopes": [
-        "document",
-        "containers",
-        "blocks"
-    ],
+    "gitlens.codeLens.scopes": ["document", "containers", "blocks"],
     "gitlens.views.commits.files.layout": "tree",
     "gitlens.views.repositories.includeWorkingTree": true,
-    "grammarly.files.include": [
-        "**/*.md",
-        "**/*.txt",
-        "**/*.tex"
-    ],
+    "grammarly.files.include": ["**/*.md", "**/*.txt", "**/*.tex"],
     "javascript.suggest.paths": false,
     "markdown.copyFiles.destination": {
         "*": "${documentBaseName}/"
