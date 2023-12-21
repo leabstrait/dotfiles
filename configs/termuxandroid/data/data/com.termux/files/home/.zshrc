@@ -154,4 +154,11 @@ WORDCHARS=${WORDCHARS//\/[&.;]}                                 # Don't consider
 PROMPT_EOL_MARK=''                                              # Removes the trailing % at the end of newlines
 export SUDO_PROMPT=$'\e[33mPassword:\e[0m '                     # Make the sudo prompt simpler and colorful
 
-tmux-shell && exit
+export EDITOR=vi
+
+# Config for less
+export LESS="-SRXF"
+
+# Local bin path
+export PATH="$PATH:$HOME/.local/bin"
+

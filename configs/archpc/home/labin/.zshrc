@@ -62,17 +62,6 @@ alias mysql="mycli"
 source $HOME/dotfiles/dotfiles.sh
 source $HOME/notes/notes.sh
 
-
-# Run loadenv on shell start
-# loadenv
-# Run loadenv on every new directory
-cd () {
-  builtin cd $@
-  loadenv
-}
-
-
-
 ### Theming ###
 autoload -U compinit colors zcalc
 compinit -d
@@ -89,13 +78,6 @@ export LESS_TERMCAP_us=$'\E[04;33m'                             # Start underlin
 export HISTCONTROL=ignoreboth:erasedups
 
 ### Prompt ###
-#autoload -U promptinit; promptinit
-#prompt spaceship                                                # Install it from the AUR (spaceship-prompt-git)
-##spaceship_vi_mode_disable                                       # Pretty explicit
-#SPACESHIP_EXEC_TIME_SHOW=true                                   # Enable showing the execution time of last command
-#SPACESHIP_DIR_TRUNC=1
-#setopt prompt_subst                                             # Enable substitution for prompt
-
 eval "$(starship init zsh)"
 
 
@@ -150,6 +132,9 @@ export SUDO_PROMPT=$'\e[33mPassword:\e[0m '                     # Make the sudo 
 source /usr/share/nvm/nvm.sh
 source /usr/share/nvm/bash_completion
 source /usr/share/nvm/install-nvm-exec
+
+# Config for less
+export LESS="-SRXF"
 
 ## Powerline
 #powerline-daemon -q
