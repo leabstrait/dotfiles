@@ -81,7 +81,7 @@ link_dotfiles() {
       fi
     done
 
-    source "${HOME}/.zprofile"
+    source "${HOME}/.zshrc"
     [[ $? ]] && _success "All files have been copied"
   fi
 }
@@ -90,6 +90,7 @@ enable_fstrim() {
   _process "→ Enabling fstrim"
 
   sudo systemctl enable fstrim.timer
+  [[ $? ]] && _success "fstrim.timer enabled"
 
 }
 
