@@ -51,11 +51,41 @@ clone_dotfiles() {
 link_dotfiles() {
   # symlink files to the ROOT(/) directory.
   if [[ -d $CONFIG_ROOT ]]; then
-    _process "→ Symlinking dotfiles in $CONFIG_ROOT"
+    _process "→ Symlinking dotfiles in $CONFIG_ROOT\n"
 
     find $CONFIG_ROOT -type f -not -name "*.bak" | while read config_file; do
       _process "→ Linking ${config_file}"
       filename=${config_file#"$CONFIG_ROOT"}
+      if [[ -f $filename ]]; then
+        echo "File $filename already exixts!"
+        echo "Do you want to show the diff between the dotfile and the original file? (y/n)"
+        read REPLY </dev/tty
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            echo "diff:"
+            if [ $filename = ${filename#"$HOME"} ]; then
+                # echo  $filename $config_file | xargs code -dw -
+                echo $filename $config_file | xargs sudo kompare
+                echo "Do you want to overwrite the original file with the tracked file? (y/n)"
+                read REPLY </dev/tty
+                if [[ $REPLY =~ ^[Yy]$ ]]; then
+                    sudo ln -sfv $config_file $filename
+                fi
+                echo
+            else
+                # echo $filename $config_file |xargs  code -dw -
+                echo $filename $config_file | xargs kompare
+                echo "Do you want to overwrite the original file with the tracked file? (y/n)"
+                read REPLY </dev/tty
+                if [[ $REPLY =~ ^[Yy]$ ]]; then
+                    ln -sfv $config_file $filename
+                fi
+                echo
+            fi
+        else
+          continue
+        fi
+      fi
       if [[ ! -L "$filename" ]]; then
         if [ $filename = ${filename#"$HOME"} ]; then
           sudo mkdir -p "$(dirname "$filename")"
