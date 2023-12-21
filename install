@@ -5,8 +5,6 @@
 DOTFILES_INSTALL_LOG="${HOME}/dotfiles.log"
 GITHUB_USER="leabstrait"
 GITHUB_REPO="dotfiles"
-USER_GIT_AUTHOR_NAME="Labin Ojha"
-USER_GIT_AUTHOR_EMAIL="leabstrait@gmail.com"
 DOTFILES_DIR="${HOME}/${GITHUB_REPO}"
 CONFIG_ROOT="$DOTFILES_DIR/configs/$(cat CONFIG_ROOT)"
 echo $CONFIG_ROOT
@@ -19,6 +17,7 @@ fi
 CONFIG_ROOT="$DOTFILES_DIR/configs/$(cat CONFIG_ROOT)"
 echo $CONFIG_ROOT
 
+# Status functions
 _process() {
   echo "$(date) PROCESSING:  $@" >>$DOTFILES_INSTALL_LOG
   printf "%s● Process:%s\n" "$(tput setaf 4)" "$(tput sgr0) $@"
@@ -42,6 +41,7 @@ _failure() {
   printf "%s✗ Failure:%s\n" "$(tput setaf 1)" "$(tput sgr0) $message"$'\n'
 }
 
+# Config functions
 clone_dotfiles() {
   if [ ! -d "${DOTFILES_DIR}" ]; then
     _process "→ Creating directory at ${DOTFILES_DIR} and setting permissions"
@@ -55,224 +55,6 @@ clone_dotfiles() {
     # Change to the dotfiles directory
     cd "${DOTFILES_DIR}"
   fi
-}
-
-setup_ssh() {
-  _process "→ Setting up SSH"
-
-  SSH_DIR="${HOME}/.ssh"
-  SSH_CONFIG="${SSH_DIR}/config"
-
-  # wait for user to press a key
-  read -p "Copy backup .ssh dir to ${DOTFILES_DIR} if you want. Press any key to continue..."$'\n'
-
-  if [ -d "${DOTFILES_DIR}/.ssh" ]; then
-    _process "→ Copying existing SSH keys"
-    if [ ! -d "${SSH_DIR}" ]; then
-      cp -rv ${DOTFILES_DIR}/.ssh/* "${SSH_DIR}"
-      chmod 700 "${SSH_DIR}"
-    else
-      _warning "→ ${SSH_DIR} already exists"s
-    fi
-
-    _process "→ Copying existing SSH config"
-    if [ ! -f "${SSH_CONFIG}" ]; then
-      cp -rv ${DOTFILES_DIR}/.ssh/config "${SSH_CONFIG}"
-      chmod 600 SSH_CONFIG
-    else
-      _warning "→ SSH config already exists"
-    fi
-
-    return 0
-  fi
-
-  if [ ! -d "${SSH_DIR}" ]; then
-    _process "Creating SSH directory"
-    mkdir -p "${SSH_DIR}"
-    chmod 700 "${SSH_DIR}"
-  fi
-
-  if [ ! -f "${SSH_CONFIG}" ]; then
-    _process "Creating SSH config"
-    touch "${SSH_CONFIG}"
-    chmod 600 SSH_CONFIG
-    echo "Host *" >>SSH_CONFIG
-    echo "  LogLevel INFO" >>SSH_CONFIG
-    echo "  StrictHostKeyChecking no" >>SSH_CONFIG
-    echo "  UserKnownHostsFile=/dev/null" >>SSH_CONFIG
-    echo "  LogLevel quiet" >>SSH_CONFIG
-    echo "  ForwardAgent yes" >>SSH_CONFIG
-    echo "  ForwardX11 no" >>SSH_CONFIG
-    echo "  ForwardX11Trusted no" >>SSH_CONFIG
-    echo "  IdentityFile ~/.ssh/id_rsa" >>SSH_CONFIG
-    echo "  ServerAliveInterval 60" >>SSH_CONFIG
-    echo "  ServerAliveCountMax 3" >>SSH_CONFIG
-    echo "  TCPKeepAlive yes" >>SSH_CONFIG
-    echo "  TCPKeepAliveIdle 60" >>SSH_CONFIG
-    echo "  TCPKeepAliveInterval 60" >>SSH_CONFIG
-    echo "  TCPKeepAliveCount 3" >>SSH_CONFIG
-    echo "  Compression yes" >>SSH_CONFIG
-    echo "  CompressionLevel 6" >>SSH_CONFIG
-    echo "  CompressionMinCompressSize 100" >>SSH_CONFIG
-    echo "  CompressionDelay yes" >>SSH_CONFIG
-  fi
-
-  _success "SSH setup"
-}
-
-setup_git() {
-  GIT_AUTHOR_NAME=$(git config user.name)
-  GIT_AUTHOR_EMAIL=$(git config user.email)
-
-  echo "GIT_AUTHOR_NAME: ${GIT_AUTHOR_NAME}"
-  echo "GIT_AUTHOR_EMAIL: ${GIT_AUTHOR_EMAIL}"
-
-  if [[ -z "$GIT_AUTHOR_NAME" ]]; then
-    _process "→ Setting up Git author"
-
-    read USER_GIT_AUTHOR_NAME
-    if [[ ! -z "$USER_GIT_AUTHOR_NAME" ]]; then
-      GIT_AUTHOR_NAME="${USER_GIT_AUTHOR_NAME}"
-      $(git config --global user.name "$GIT_AUTHOR_NAME")
-    else
-      _warning "No Git user name has been set.  Please update manually"
-    fi
-  else
-    _process "→ Git author already set, moving on..."
-  fi
-
-  if [[ -z "$GIT_AUTHOR_EMAIL" ]]; then
-    _process "→ Setting up Git email"
-
-    read USER_GIT_AUTHOR_EMAIL
-    if [[ ! -z "$USER_GIT_AUTHOR_EMAIL" ]]; then
-      GIT_AUTHOR_EMAIL="${USER_GIT_AUTHOR_EMAIL}"
-      $(git config --global user.email "$GIT_AUTHOR_EMAIL")
-    else
-      _warning "No Git user email has been set.  Please update manually"
-    fi
-  else
-    _process "→ Git author email already set, moving on..."
-  fi
-}
-
-install_paru() {
-  if ! type -P paru &>/dev/null; then
-    _process "→ Installing paru"
-    git clone https://aur.archlinux.org/paru.git
-
-    # Install base-devel needed for builiding AUR packages
-    pacman -S base-devel --noconfirm
-
-    _process "→ Building paru"
-    cd paru
-    makepkg -si
-    [[ $? ]] &&
-      _success "Installed paru"
-
-    cd $DOTFILES_DIR
-    rm -rf paru
-
-    # Install some necessary packages
-    paru -S polkit --noconfirm
-  else
-    _process "→ paru already installed, moving on..."
-  fi
-}
-
-install_packages() {
-  if ! type -P paru &>/dev/null; then
-    _failure "paru not found"
-  else
-    _process "→ Installing packages with paru"
-
-    # Set variable for list of packages
-    packages_list="${DOTFILES_DIR}/linux-packages.list"
-
-    # Update and upgrade all packages
-    _process "→ Updating and upgrading packages"
-    paru -Syu
-
-    # Store IFS within a temp variable
-    OIFS=$IFS
-
-    # Set the separator to a carriage return & a new line break
-    # read in passed-in file and store as an array
-    IFS=$'\r\n' packages=($(cat "${packages_list}"))
-
-    # Loop through split list of packages
-    _process "→ Checking status of desired package"
-    for index in ${!packages[*]}; do
-      # Test whether a package is already installed
-      echo "${packages[$index]}"
-      if ! paru -Qi ${packages[$index]} &>/dev/null; then
-        paru -S ${packages[$index]} --noconfirm
-      fi
-    done
-
-    # Reset IFS back
-    IFS=$OIFS
-
-    #paru clean
-
-    [[ $? ]] && _success "All packages installed and updated"
-  fi
-}
-
-install_vscode_extensions() {
-  if ! type -P code &>/dev/null; then
-    _failure "VSCode not found"
-  else
-    _process "→ Installing VSCode extensions"
-
-    # Set variable for list of extensions
-    extensions_list="${DOTFILES_DIR}/vscode-extensions.list"
-
-    # Store IFS within a temp variable
-    OIFS=$IFS
-
-    # Set the separator to a carriage return & a new line break
-    # read in passed-in file and store as an array
-    IFS=$'\r\n' extensions=($(cat "${extensions_list}"))
-
-    # Loop through split list of extensions
-    for index in ${!extensions[*]}; do
-      # Test whether an extension is already installed
-      if code --list-extensions | grep ${extensions[$index]} &>/dev/null; then
-        _warning "→ Extension ${extensions[$index]} already installed"
-      else
-        code --install-extension ${extensions[$index]}
-      fi
-    done
-
-    # Reset IFS back
-    IFS=$OIFS
-
-    [[ $? ]] && _success "All VSCode extensions installed"
-  fi
-}
-
-install_pictures() {
-  _process "→ Installing pictures"
-  sudo cp $DOTFILES_DIR/pictures/backgrounds/* /usr/share/backgrounds/
-  sudo cp $DOTFILES_DIR/pictures/icons/* /usr/share/icons/
-  [[ $? ]] && _success "Pictures installed"
-}
-
-enable_services() {
-  _process "→ Enabling services"
-
-  sudo systemctl enable fstrim.timer
-  sudo systemctl enable NetworkManager
-  sudo systemctl enable lightdm
-  sudo systemctl enable docker
-
-  systemctl --user enable conky
-}
-
-add_user_to_groups() {
-  _process "→ Adding user to groups"
-  sudo usermod -aG audio,video,storage,power,wheel,docker $USER
 }
 
 link_dotfiles() {
@@ -299,24 +81,27 @@ link_dotfiles() {
       fi
     done
 
-    source "${HOME}/.zprofile"
+    source "${HOME}/.zshrc"
     [[ $? ]] && _success "All files have been copied"
   fi
 }
 
+enable_fstrim() {
+  _process "→ Enabling fstrim"
+
+  sudo systemctl enable fstrim.timer
+  [[ $? ]] && _success "fstrim.timer enabled"
+
+}
+
+# Install runner
 install() {
   # start with a clean logfile
   echo >"${DOTFILES_INSTALL_LOG}"
 
-#  clone_dotfiles
-#  setup_ssh
-#  setup_git
-#  install_paru
-#  install_packages
-#  install_vscode_extensions
-#  install_pictures
-#  enable_services
+  clone_dotfiles
   link_dotfiles
+  enable_fstrim
 }
 
 install

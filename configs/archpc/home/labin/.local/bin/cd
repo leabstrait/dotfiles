@@ -1,0 +1,6 @@
+# Run unloadenv(old dir) and loadenv(new dir) on every new directory
+function cd () {
+  builtin cd $@
+  unloadenv
+  loadenv
+}
