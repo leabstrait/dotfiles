@@ -7,15 +7,6 @@ GITHUB_USER="leabstrait"
 GITHUB_REPO="dotfiles"
 DOTFILES_DIR="${HOME}/${GITHUB_REPO}"
 CONFIG_ROOT="$DOTFILES_DIR/configs/$(cat CONFIG_ROOT)"
-echo $CONFIG_ROOT
-
-if [ ! -f "$DOTFILES_DIR/CONFIG_ROOT" ]; then
-  echo "Need the CONFIG_ROOT file!"
-  return
-fi
-
-CONFIG_ROOT="$DOTFILES_DIR/configs/$(cat CONFIG_ROOT)"
-echo $CONFIG_ROOT
 
 # Status functions
 _process() {
@@ -96,6 +87,13 @@ enable_fstrim() {
 
 # Install runner
 install() {
+  if [ ! -f "$DOTFILES_DIR/CONFIG_ROOT" ]; then
+    echo "Need the CONFIG_ROOT file!"
+    return
+  fi
+
+  echo $CONFIG_ROOT
+
   # start with a clean logfile
   echo >"${DOTFILES_INSTALL_LOG}"
 
