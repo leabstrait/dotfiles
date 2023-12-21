@@ -44,7 +44,7 @@ function dotfiles() {
         fi
 
         if [ $command = "track" ]; then
-            # check if the file path is prefixed with the dotfiles directory
+            # if the file path is not prefixed with the dotfiles directory then track
             if [[ ! $file =~ ^$DOTFILES_DIR ]]; then
                 mkdir -p $CONFIG_ROOT$(dirname $file)
                 cp $file $CONFIG_ROOT$file
