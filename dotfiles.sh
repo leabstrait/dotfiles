@@ -93,7 +93,7 @@ function dotfiles() {
                             echo "diff:"
                             if [ $tracked_file_orig_path = ${tracked_file_orig_path#"$HOME"} ]; then
                                 # echo  $tracked_file_orig_path $tracked_file | xargs code -dw -
-                                echo $tracked_file_orig_path $tracked_file | xargs sudo meld
+                                echo $tracked_file_orig_path $tracked_file | xargs sudo kompare
                                 echo "Do you want to overwrite the original file with the tracked file? (y/n)"
                                 read REPLY </dev/tty
                                 if [[ $REPLY =~ ^[Yy]$ ]]; then
@@ -102,7 +102,7 @@ function dotfiles() {
                                 echo
                             else
                                 # echo $tracked_file_orig_path $tracked_file |xargs  code -dw -
-                                echo $tracked_file_orig_path $tracked_file | xargs meld
+                                echo $tracked_file_orig_path $tracked_file | xargs kompare
                                 echo "Do you want to overwrite the original file with the tracked file? (y/n)"
                                 read REPLY </dev/tty
                                 if [[ $REPLY =~ ^[Yy]$ ]]; then
