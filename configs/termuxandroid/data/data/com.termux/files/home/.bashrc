@@ -1,11 +1,11 @@
-#
-# ███████╗███████╗██╗  ██╗
-# ╚══███╔╝██╔════╝██║  ██║
-#   ███╔╝ ███████╗███████║
-#  ███╔╝  ╚════██║██╔══██║
-# ███████╗███████║██║  ██║
-# ╚══════╝╚══════╝╚═╝  ╚═╝
-#
+#  ███████████    █████████    █████████  █████   █████
+# ░░███░░░░░███  ███░░░░░███  ███░░░░░███░░███   ░░███
+#  ░███    ░███ ░███    ░███ ░███    ░░░  ░███    ░███
+#  ░██████████  ░███████████ ░░█████████  ░███████████
+#  ░███░░░░░███ ░███░░░░░███  ░░░░░░░░███ ░███░░░░░███
+#  ░███    ░███ ░███    ░███  ███    ░███ ░███    ░███
+#  ███████████  █████   █████░░█████████  █████   █████
+# ░░░░░░░░░░░  ░░░░░   ░░░░░  ░░░░░░░░░  ░░░░░   ░░░░░
 
 #set -euo pipefail
 
@@ -78,8 +78,7 @@ export LESS_TERMCAP_us=$'\E[04;33m'                             # Start underlin
 export HISTCONTROL=ignoreboth:erasedups
 
 ### Prompt ###
-eval "$(starship init zsh)"
-
+eval "$(starship init bash)"
 
 ### Auto-completion ###
 zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z}'       # Case insensitive tab completion
@@ -139,3 +138,33 @@ export LESS="-SRXF"
 ## Powerline
 #powerline-daemon -q
 #source /usr/share/powerline/bindings/zsh/powerline.zsh
+
+# Local bin path
+export PATH="$HOME/.local/bin:$PATH"
+
+# Funtions to load and unload env vars from an .env file
+function loadenv() {
+    [ "$#" -eq 1 ] && env="$1" || env=".env"
+    [ -f "$env" ] && { echo "Env file $env exists in $PWD, loading it's env vars..."; } || { return 1; }
+    set -o allexport
+    source <(
+        /usr/bin/cat "$env" |
+            sed -e '/^#/d;/^\s*$/d' |
+            sed -e "s/'/'\\\''/g" |
+            sed -e "s/=\(.*\)/='\1'/g"
+    ) && "$@"
+    set +o allexport
+    unset env
+}
+function unloadenv() {
+    [ "$#" -eq 1 ] && oldenv="$1" || oldenv="$OLDPWD/.env"
+    [ -f "$oldenv" ] && { echo "Env file $oldenv exists in $OLDPWD, remove it's env vars..." } || { return 1; }
+    unset $(grep -v '^#' $oldenv | sed -E 's/(.*)=.*/\1/' | xargs)
+    unset oldenv
+}
+# Run unloadenv(old dir) and loadenv(new dir) on every new directory
+function cd () {
+    builtin cd $@
+    unloadenv
+    loadenv
+}

@@ -62,26 +62,26 @@ link_dotfiles() {
         read REPLY </dev/tty
         echo
         if [[ $REPLY =~ ^[Yy]$ ]]; then
-            echo "diff:"
-            if [ $filename = ${filename#"$HOME"} ]; then
-                # echo  $filename $config_file | xargs code -dw -
-                echo $filename $config_file | xargs sudo kompare
-                echo "Do you want to overwrite the original file with the tracked file? (y/n)"
-                read REPLY </dev/tty
-                if [[ $REPLY =~ ^[Yy]$ ]]; then
-                    sudo ln -sfv $config_file $filename
-                fi
-                echo
-            else
-                # echo $filename $config_file |xargs  code -dw -
-                echo $filename $config_file | xargs kompare
-                echo "Do you want to overwrite the original file with the tracked file? (y/n)"
-                read REPLY </dev/tty
-                if [[ $REPLY =~ ^[Yy]$ ]]; then
-                    ln -sfv $config_file $filename
-                fi
-                echo
+          echo "diff:"
+          if [ $filename = ${filename#"$HOME"} ]; then
+            # echo  $filename $config_file | xargs code -dw -
+            echo $filename $config_file | xargs sudo kompare
+            echo "Do you want to overwrite the original file with the tracked file? (y/n)"
+            read REPLY </dev/tty
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+              sudo ln -sfv $config_file $filename
             fi
+            echo
+          else
+            # echo $filename $config_file |xargs  code -dw -
+            echo $filename $config_file | xargs kompare
+            echo "Do you want to overwrite the original file with the tracked file? (y/n)"
+            read REPLY </dev/tty
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+              ln -sfv $config_file $filename
+            fi
+            echo
+          fi
         else
           continue
         fi
@@ -101,8 +101,6 @@ link_dotfiles() {
         _failure "→ Not linked $config_file; link exists"
       fi
     done
-
-    source "${HOME}/.zshrc" && _success "All files have been copied"
   fi
 }
 

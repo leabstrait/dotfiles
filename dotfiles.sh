@@ -7,8 +7,7 @@ function dotfiles() {
         return
     fi
 
-
-    CONFIG_ROOT="$HOME/dotfiles/configs/$(cat "$DOTFILES_DIR/CONFIG_ROOT")"
+    CONFIG_ROOT="$HOME/dotfiles/configs/$(/usr/bin/cat "$DOTFILES_DIR/CONFIG_ROOT")"
     echo $CONFIG_ROOT
 
     # check if the function is provided with arguments
@@ -18,8 +17,8 @@ function dotfiles() {
         echo "<file>: the file to track or untrack"
         echo "<git commands>: git commands to be executed"
         echo ""
-        echo "Example: dotfiles track .zshrc"
-        echo "Example: dotfiles untrack .zshrc"
+        echo "Example: dotfiles track .bashrc"
+        echo "Example: dotfiles untrack .bashrc"
         echo "Example: dotfiles commit -m ''"
         return
     fi
