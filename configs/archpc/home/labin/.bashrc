@@ -116,8 +116,8 @@ export PATH="$HOME/.local/bin:$PATH"
 
 # Funtions to load and unload env vars from an .env file
 function loadenv() {
-    [ "$#" -eq 1 ] && env="$1" || env=".env"
-    [ -f "$env" ] && { echo "Env file $env exists in $PWD, loading its env vars..."; } || { return 0; }
+    [ "$#" -eq 1 ] && env="$1" || env="$PWD/.env"
+    [ -f "$env" ] && { echo "Env file $(realpath $env) found - loading its env vars..."; } || { return 0; }
     set -o allexport
     source <(
         /usr/bin/cat "$env" |
@@ -129,8 +129,8 @@ function loadenv() {
     unset env
 }
 function unloadenv() {
-    [ "$#" -eq 1 ] && oldenv="$1" || oldenv="$OLDPWD/.env"
-    [ -f "$oldenv" ] && { echo "Env file $oldenv exists in $OLDPWD, remove its env vars..."; } || { return 0; }
+    [ "$#" -eq 1 ] && oldenv="$1" || [ -f "$OLDPWD/.env" ] && oldenv="$OLDPWD/.env" || oldenv="$PWD/.env"
+    [ -f "$oldenv" ] && { echo "Env file $(realpath $oldenv) found - remove its env vars..."; } || { return 0; }
     unset $(grep -v '^#' $oldenv | sed -E 's/(.*)=.*/\1/' | xargs)
     unset oldenv
 }
