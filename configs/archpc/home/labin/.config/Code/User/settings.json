@@ -192,5 +192,6 @@
         "!Select sequence",
         "!Split",
         "!Split sequence"
-    ]
+    ],
+    "material-icon-theme.folders.theme": "specific"
 }
