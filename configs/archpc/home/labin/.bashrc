@@ -21,15 +21,26 @@
 # setopt histignorealldups                                        # If a new command is a duplicate, remove the older one
 # setopt autocd                                                   # if only directory path is entered, cd there.
 
-# source all files in .bashrc.d directory
+### source all files in .bashrc.d directory ###
 for file in $HOME/.bashrc.d/*.bashrc; do
     source $file
-    echo "Sourced $file"
 done
 
 ### Source homegrown functions ###
 source $HOME/dotfiles/dotfiles.sh
 source $HOME/notes/notes.sh
+
+### Source fzf ###
+source /usr/share/fzf/completion.bash
+source /usr/share/fzf/key-bindings.bash
+
+# When selecting files with fzf, we show file content with syntax highlighting,
+# or without highlighting if it's not a source file. If the file is a directory,
+# we use tree to show the directory's contents.
+# We only load the first 200 lines of the file which enables fast previews
+# of large text files.
+# Requires highlight and tree: pacman -S highlight tree
+export FZF_DEFAULT_OPTS="--preview '(highlight -O ansi -l {} 2> /dev/null || cat {} || tree -C {}) 2> /dev/null | head -200'"
 
 ### Theming ###
 # autoload -U compinit colors zcalc
