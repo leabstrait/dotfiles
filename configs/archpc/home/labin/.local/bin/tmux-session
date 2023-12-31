@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+
+if [ -x "$(command -v tmux)" ] && [ -n "$DISPLAY" ]; then
+    [ -z "$TMUX" ] && {
+        tmux attach-session -d -t home -c "$HOME" ||
+            exec tmux new-session -s home -c "$HOME" && exit
+    } >$HOME/tmux-session.log 2>&1
+
+fi
