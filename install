@@ -104,12 +104,6 @@ link_dotfiles() {
   fi
 }
 
-enable_fstrim() {
-  _process "→ Enabling fstrim"
-
-  sudo systemctl enable fstrim.timer && _success "fstrim.timer enabled"
-
-}
 
 # Install runner
 install() {
@@ -125,7 +119,6 @@ install() {
 
   clone_dotfiles
   link_dotfiles
-  enable_fstrim
 }
 
 install

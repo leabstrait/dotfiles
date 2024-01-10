@@ -148,7 +148,7 @@ function loadenv() {
     [ -f "$env" ] && { echo "Env file $env exists in $PWD, loading it's env vars..."; } || { return 1; }
     set -o allexport
     source <(
-        /usr/bin/cat "$env" |
+        < "$env" |
             sed -e '/^#/d;/^\s*$/d' |
             sed -e "s/'/'\\\''/g" |
             sed -e "s/=\(.*\)/='\1'/g"

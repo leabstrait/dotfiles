@@ -7,7 +7,7 @@ function dotfiles() {
         return
     fi
 
-    CONFIG_ROOT="$HOME/dotfiles/configs/$(/usr/bin/cat "$DOTFILES_DIR/CONFIG_ROOT")"
+    CONFIG_ROOT="$HOME/dotfiles/configs/$(< "$DOTFILES_DIR/CONFIG_ROOT")"
     echo $CONFIG_ROOT
 
     # check if the function is provided with arguments
