@@ -153,7 +153,7 @@ function loadenv() {
     [ -f "$env" ] && { echo "Env file $(realpath $env) found - loading its env vars..."; } || { return 0; }
     set -o allexport
     source <(
-        /usr/bin/cat "$env" |
+        < "$env" |
             sed -e '/^#/d;/^\s*$/d' |
             sed -e "s/'/'\\\''/g" |
             sed -e "s/=\(.*\)/='\1'/g"
