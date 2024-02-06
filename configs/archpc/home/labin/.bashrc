@@ -48,14 +48,24 @@ export FZF_DEFAULT_OPTS="--preview '(highlight -O ansi -l {} 2> /dev/null || cat
 # colors
 
 # Color man pages (with termcap variables)
-export LESS_TERMCAP_mb=$'\E[05;31m'    # Start blink
-export LESS_TERMCAP_md=$'\E[01;32m'    # Start bold
-export LESS_TERMCAP_me=$'\E[0m'        # Turn off bold, blink and underline
-export LESS_TERMCAP_se=$'\E[0m'        # Stop standout
-export LESS_TERMCAP_so=$'\E[01;44;30m' # Start standout (reverse video)
-export LESS_TERMCAP_ue=$'\E[0m'        # Stop underline
-export LESS_TERMCAP_us=$'\E[04;33m'    # Start underline
 
+man() {
+    # Start blink
+    LESS_TERMCAP_mb=$'\E[05;31m'    \
+    # Start bold
+    LESS_TERMCAP_md=$'\E[01;32m'    \
+    # Turn off bold, blink and underline
+    LESS_TERMCAP_me=$'\E[0m'        \
+    # Stop standout
+    LESS_TERMCAP_se=$'\E[0m'        \
+    # Start standout (reverse video)
+    LESS_TERMCAP_so=$'\E[01;44;30m' \
+    # Stop underline
+    LESS_TERMCAP_ue=$'\E[0m'        \
+    # Start underline
+    LESS_TERMCAP_us=$'\E[04;33m'    \
+    command man "$@"
+}
 export HISTCONTROL=ignoreboth:erasedups
 
 ### Prompt ###
@@ -76,6 +86,8 @@ eval "$(starship init bash)"
 HISTFILE=~/.bash_history
 HISTSIZE=1000
 SAVEHIST=500
+HISTCONTROL=ignoreboth:erasedups
+
 
 ### Plugins ###
 # # Use syntax highlighting
