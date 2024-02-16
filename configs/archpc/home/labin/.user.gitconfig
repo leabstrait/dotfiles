@@ -1,0 +1,10 @@
+[user]
+email = leabstrait@gmail.com
+name = Labin Ojha
+# signingkey = leabstrait@gmail.com
+
+# [commit]
+# gpgsign = true
+
+# [tag]
+# gpgsign = true

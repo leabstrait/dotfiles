@@ -1,9 +1,8 @@
 [init]
 defaultBranch = main
 
-[user]
-email = leabstrait@gmail.com
-name = Labin Ojha
+[include]
+path = ~/.user.gitconfig
 
 [core]
 editor = code --wait
@@ -38,6 +37,8 @@ acp = !"f() { if [ -n "$1" ]; then git a -i "$1"; else git a -i . ; fi; git comm
 last = log -1 HEAD
 logp = log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%ar) %C(bold blue)<%an>%Creset' --abbrev-commit
 logd = logp --patch
+logs = !"f() { git log -S "$1"; };f"
+logsp = !"f() { git log -S "$1" -p; };f"
 viz = !gitk
 
 unstage = reset HEAD --
