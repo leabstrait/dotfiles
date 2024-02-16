@@ -2,7 +2,7 @@
 
 # set -euo pipefail
 
-DOTFILES_INSTALL_LOG="${HOME}/dotfiles.log"
+DOTFILES_INSTALL_LOG="${HOME}/dotfiles-install.log"
 GITHUB_USER="leabstrait"
 GITHUB_REPO="dotfiles"
 DOTFILES_DIR="${HOME}/${GITHUB_REPO}"
