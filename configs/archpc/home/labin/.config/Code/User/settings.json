@@ -67,7 +67,7 @@
     "editor.formatOnSave": true,
     "editor.formatOnSaveMode": "modificationsIfAvailable",
     "editor.formatOnType": true,
-    "editor.guides.bracketPairs": "false",
+    "editor.guides.bracketPairs": false,
     "editor.guides.indentation": false,
     "editor.inlayHints.enabled": "off",
     "editor.inlineSuggest.enabled": true,
@@ -125,8 +125,7 @@
         "*": "${documentBaseName}/"
     },
     "markdown.editor.filePaste.copyIntoWorkspace": "mediaFiles",
-    "markdown.editor.pasteUrlAsFormattedLink.enabled": true,
-    "markdown.editor.pasteUrlAsFormattedLink.enabled": true,
+    "markdown.editor.pasteUrlAsFormattedLink.enabled": "smartWithSelection",
     "notebook.cellToolbarLocation": {
         "default": "right",
         "jupyter-notebook": "right"
@@ -188,5 +187,8 @@
         "!Split",
         "!Split sequence"
     ],
-    "material-icon-theme.folders.theme": "specific"
+    "material-icon-theme.folders.theme": "specific",
+    "workbench.editorAssociations": {
+        "*.pdf": "latex-workshop-pdf-hook"
+    }
 }
