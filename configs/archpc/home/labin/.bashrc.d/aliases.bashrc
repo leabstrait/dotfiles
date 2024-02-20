@@ -20,7 +20,8 @@ alias rs="rsync -r --info=progress2" # Rsync with progress bar
 # editor
 alias v="vim"          # Shorter editor command
 alias sv="sudo -E vim" # Edit file as root with nano
-alias cat="bat --theme=ansi"
+export BAT_THEME="GitHub"
+alias cat="bat"
 
 # utils
 alias df="df -h"                                  # Human-readable sizes
