@@ -37,7 +37,6 @@ done
 
 # Source homegrown functions
 source $HOME/dotfiles/dotfiles.sh
-source $HOME/notes/notes.sh
 
 # Source fzf
 source /usr/share/fzf/completion.bash
