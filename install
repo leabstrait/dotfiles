@@ -124,29 +124,30 @@ install_paru() {
 # Install packages from ~/.explicitly-installed-packages
 install_packages() {
   _process "→ Installing packages with paru"
-  paru -S --needed - <~/.explicitly-installed-packages
-  _success "→ Packages installed"
+  if [ -f ~/.explicitly-installed-packages ]; then
+    paru -S --needed - <~/.explicitly-installed-packages
+    _success "→ Packages installed"
+  fi
 }
 
 # Enable services from ~/.enabled-services-system and ~/.enabled-services-user
 enable_services() {
   _process "→ Enabling services"
-  if [ -d ~/.enabled-services-system ]; then
-    systemctl enable --now $(cat ~/.enabled-services-system)
-    _success "→ Enabled system services"
+  if [ -f ~/.enabled-services-system ]; then
+    sudo systemctl enable $(< ~/.enabled-services-system)
+    _success "→ System services enabled"
     sleep 1
-    systemctl status --no-pager $(cat ~/.enabled-services-system)
+    sudo systemctl status --no-pager $(< ~/.enabled-services-system)
+    _success "→ System services status"
     sleep 1
-    echo
   fi
-  if [ -d ~/.enabled-services-user ]; then
-    su -l $USER
-    systemctl enable --now $(cat ~/.enabled-services-user)
-    _success "→ Enabled user services"
+  if [ -f ~/.enabled-services-user ]; then
+    systemctl --user enable $(< ~/.enabled-services-user)
+    _success "→ User services enabled"
     sleep 1
-    systemctl status --no-pager $(cat ~/.enabled-services-user)
+    systemctl --user status --no-pager $(< ~/.enabled-services-user)
+    _success "→ User services status"
     sleep 1
-    echo
   fi
 }
 
