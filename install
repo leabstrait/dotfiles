@@ -6,7 +6,8 @@ DOTFILES_INSTALL_LOG="${HOME}/dotfiles-install.log"
 GITHUB_USER="leabstrait"
 GITHUB_REPO="dotfiles"
 DOTFILES_DIR="${HOME}/${GITHUB_REPO}"
-CONFIG_ROOT="$DOTFILES_DIR/configs/$(cat CONFIG_ROOT)"
+CONFIG_ROOT="$DOTFILES_DIR/configs/$(hostnamectl hostname)"
+echo $CONFIG_ROOT
 
 # Status functions
 _process() {
@@ -65,7 +66,7 @@ link_dotfiles() {
           echo "diff:"
           if [ $filename = ${filename#"$HOME"} ]; then
             # echo  $filename $config_file | xargs code -dw -
-            echo $filename $config_file | xargs sudo kompare
+            echo $filename $config_file | xargs sudo meld
             echo "Do you want to overwrite the original file with the tracked file? (y/n)"
             read REPLY </dev/tty
             if [[ $REPLY =~ ^[Yy]$ ]]; then
@@ -74,7 +75,7 @@ link_dotfiles() {
             echo
           else
             # echo $filename $config_file |xargs  code -dw -
-            echo $filename $config_file | xargs kompare
+            echo $filename $config_file | xargs meld
             echo "Do you want to overwrite the original file with the tracked file? (y/n)"
             read REPLY </dev/tty
             if [[ $REPLY =~ ^[Yy]$ ]]; then
@@ -104,21 +105,63 @@ link_dotfiles() {
   fi
 }
 
+# Install paru AUR helper
+install_paru() {
+  _process "→ Installing paru"
+  git clone https://aur.archlinux.org/paru-bin.git ~/paru
+  cd ~/paru
+  makepkg -si
+  cd -
+  _success "→ paru installed"
+  _process "→ Updating paru"
+  paru -Syu
+  _success "→ paru updated"
+  _process "→ Cleaning up paru"
+  rm -rf ~/paru
+  _success "→ paru cleaned up"
+}
+
+# Install packages from ~/.explicitly-installed-packages
+install_packages() {
+  _process "→ Installing packages with paru"
+  paru -S --needed - <~/.explicitly-installed-packages
+  _success "→ Packages installed"
+}
+
+# Enable services from ~/.enabled-services-system and ~/.enabled-services-user
+enable_services() {
+  _process "→ Enabling services"
+  if [ -d ~/.enabled-services-system ]; then
+    systemctl enable --now $(cat ~/.enabled-services-system)
+    _success "→ Enabled system services"
+    sleep 1
+    systemctl status --no-pager $(cat ~/.enabled-services-system)
+    sleep 1
+    echo
+  fi
+  if [ -d ~/.enabled-services-user ]; then
+    su -l $USER
+    systemctl enable --now $(cat ~/.enabled-services-user)
+    _success "→ Enabled user services"
+    sleep 1
+    systemctl status --no-pager $(cat ~/.enabled-services-user)
+    sleep 1
+    echo
+  fi
+}
 
 # Install runner
 install() {
-  if [ ! -f "$DOTFILES_DIR/CONFIG_ROOT" ]; then
-    echo "Need the CONFIG_ROOT file!"
-    return
-  fi
-
-  echo $CONFIG_ROOT
-
   # start with a clean logfile
   echo >"${DOTFILES_INSTALL_LOG}"
 
   clone_dotfiles
   link_dotfiles
+
+  install_paru
+  install_packages
+
+  enable_services
 }
 
 install

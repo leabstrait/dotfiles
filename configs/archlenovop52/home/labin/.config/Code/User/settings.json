@@ -135,7 +135,7 @@
     "svelte.enable-ts-plugin": true,
     "terminal.integrated.copyOnSelection": true,
     "terminal.integrated.cursorBlinking": true,
-    "terminal.integrated.defaultProfile.windows": "Git Bash",
+    "terminal.integrated.defaultProfile.windows": "PowerShell",
     "terminal.integrated.enablePersistentSessions": false,
     "terminal.integrated.fontFamily": "JetBrainsMono Nerd Font",
     "terminal.integrated.tabs.enabled": true,
@@ -193,7 +193,11 @@
     "window.zoomLevel": -0.5,
     "super-figure.vectorFigureEditor": "/usr/bin/inkscape",
     "super-figure.bitmapFigureEditor": "/usr/bin/gimp",
-    "blockman.n04ColorComboPreset": "Classic Dark 1 (Solid colors)",
-    "workbench.colorTheme": "GitHub Light",
-    "workbench.preferredDarkColorTheme": "Visual Studio Dark"
+    "blockman.n04ColorComboPreset": "Classic Light (Gradients)",
+    "workbench.colorTheme": "Default Light Modern",
+    "workbench.preferredDarkColorTheme": "Visual Studio Dark",
+    "files.insertFinalNewline": true,
+    "[javascriptreact]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    }
 }

@@ -1,0 +1,3 @@
+NetworkManager.service
+sddm.service
+fstrim.timer

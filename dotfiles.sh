@@ -2,12 +2,7 @@
 function dotfiles() {
     DOTFILES_DIR="$HOME/dotfiles"
 
-    if [ ! -f "$DOTFILES_DIR/CONFIG_ROOT" ]; then
-        echo "Need the CONFIG_ROOT file!"
-        return
-    fi
-
-    CONFIG_ROOT="$HOME/dotfiles/configs/$(< "$DOTFILES_DIR/CONFIG_ROOT")"
+    CONFIG_ROOT="$HOME/dotfiles/configs/$(hostnamectl hostname)"
     echo $CONFIG_ROOT
 
     # check if the function is provided with arguments
@@ -23,7 +18,7 @@ function dotfiles() {
         return
     fi
 
-    # check if the first argument is a valid command (track, untrack, sync) or a git command
+    # check if the first argument is a valid command (track, untrack, listchanges) or a git command
     if [ "$1" = "track" ] || [ "$1" = "untrack" ] || [ "$1" = "listchanges" ]; then
 
         local command=$1
@@ -78,9 +73,9 @@ function dotfiles() {
         fi
 
         if [ $command = "listchanges" ]; then
-            find $DOTFILES_DIR/CONFIG_ROOT -type f | while read tracked_file; do
+            find $CONFIG_ROOT -type f | while read tracked_file; do
                 if [ -f $tracked_file ]; then
-                    local tracked_file_orig_path=${tracked_file#"$DOTFILES_DIR/CONFIG_ROOT"}
+                    local tracked_file_orig_path=${tracked_file#"$CONFIG_ROOT"}
                     if [ ! -L $tracked_file_orig_path ]; then
                         echo "tracked_file: $tracked_file"
                         echo "tracked_file_orig_path: $tracked_file_orig_path"
@@ -92,7 +87,7 @@ function dotfiles() {
                             echo "diff:"
                             if [ $tracked_file_orig_path = ${tracked_file_orig_path#"$HOME"} ]; then
                                 # echo  $tracked_file_orig_path $tracked_file | xargs code -dw -
-                                echo $tracked_file_orig_path $tracked_file | xargs sudo kompare
+                                echo $tracked_file_orig_path $tracked_file | xargs sudo meld
                                 echo "Do you want to overwrite the original file with the tracked file? (y/n)"
                                 read REPLY </dev/tty
                                 if [[ $REPLY =~ ^[Yy]$ ]]; then
@@ -101,7 +96,7 @@ function dotfiles() {
                                 echo
                             else
                                 # echo $tracked_file_orig_path $tracked_file |xargs  code -dw -
-                                echo $tracked_file_orig_path $tracked_file | xargs kompare
+                                echo $tracked_file_orig_path $tracked_file | xargs meld
                                 echo "Do you want to overwrite the original file with the tracked file? (y/n)"
                                 read REPLY </dev/tty
                                 if [[ $REPLY =~ ^[Yy]$ ]]; then
