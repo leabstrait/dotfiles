@@ -1,14 +1,11 @@
 base
 base-devel
 bat
-dolphin
 eza
 fzf
 git
 google-chrome
-hyprland
 intel-ucode
-kitty
 linux
 linux-firmware
 man-db
@@ -20,12 +17,8 @@ nvidia
 nvm
 openssh
 paru-bin
-paru-bin-debug
 pkgfile
-sddm
-seahorse
 starship
 texinfo
 ttf-jetbrains-mono-nerd
 visual-studio-code-bin
-wofi
