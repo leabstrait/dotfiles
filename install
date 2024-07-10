@@ -126,7 +126,7 @@ install_paru() {
 
 # Install meld diff tool
 install_meld() {
-  if [[ -z $(command -v meld)]]; then
+  if [[ -z $(command -v meld) ]]; then
     _process "→ Installing meld"
     paru -S meld
     _success "→ meld installed"
