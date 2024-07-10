@@ -1,8 +1,0 @@
-#!/usr/bin/env bash
-
-SESSION="vscode - $(pwd)"
-WORKDIR=$(pwd)
-{
-    tmux attach-session -d -t "$SESSION" -c "$WORKDIR" ||
-        exec tmux new-session -s "$SESSION" -c "$WORKDIR" && exit
-} >$HOME/vscode-tmux-session.log 2>&1
