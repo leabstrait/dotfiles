@@ -121,6 +121,13 @@ install_paru() {
   _success "→ paru cleaned up"
 }
 
+# Install meld diff tool
+install_meld() {
+  _process "→ Installing meld"
+  paru -S meld
+  _success "→ meld installed"
+}
+
 # Install packages from ~/.explicitly-installed-packages
 install_packages() {
   _process "→ Installing packages with paru"
@@ -156,12 +163,13 @@ install() {
   # start with a clean logfile
   echo >"${DOTFILES_INSTALL_LOG}"
 
+  install_paru
+  install_meld
+
   clone_dotfiles
   link_dotfiles
 
-  install_paru
   install_packages
-
   enable_services
 }
 
