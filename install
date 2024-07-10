@@ -107,25 +107,30 @@ link_dotfiles() {
 
 # Install paru AUR helper
 install_paru() {
-  _process "→ Installing paru"
-  git clone https://aur.archlinux.org/paru-bin.git ~/paru
-  cd ~/paru
-  makepkg -si
-  cd -
-  _success "→ paru installed"
-  _process "→ Updating paru"
-  paru -Syu
-  _success "→ paru updated"
-  _process "→ Cleaning up paru"
-  rm -rf ~/paru
-  _success "→ paru cleaned up"
+  if [[ ! command -v paru ]] &> /dev/null; then
+    _process "→ Installing paru"
+    git clone https://aur.archlinux.org/paru-bin.git ~/paru
+    cd ~/paru
+    makepkg -si
+    cd -
+    _success "→ paru installed"
+    _process "→ Updating paru"
+    paru -Syu
+    _success "→ paru updated"
+    _process "→ Cleaning up paru"
+    rm -rf ~/paru
+    _success "→ paru cleaned up"
+  fi
+
 }
 
 # Install meld diff tool
 install_meld() {
-  _process "→ Installing meld"
-  paru -S meld
-  _success "→ meld installed"
+  if [[ ! command -v meld ]] &> /dev/null; then
+    _process "→ Installing meld"
+    paru -S meld
+    _success "→ meld installed"
+  fi
 }
 
 # Install packages from ~/.explicitly-installed-packages
