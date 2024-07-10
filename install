@@ -107,7 +107,7 @@ link_dotfiles() {
 
 # Install paru AUR helper
 install_paru() {
-  if [[ ! command -v paru ]] &> /dev/null; then
+  if [[ ! command -v paru &> /dev/null ]]; then
     _process "→ Installing paru"
     git clone https://aur.archlinux.org/paru-bin.git ~/paru
     cd ~/paru
@@ -126,7 +126,7 @@ install_paru() {
 
 # Install meld diff tool
 install_meld() {
-  if [[ ! command -v meld ]] &> /dev/null; then
+  if [[ ! command -v meld &> /dev/null ]]; then
     _process "→ Installing meld"
     paru -S meld
     _success "→ meld installed"
