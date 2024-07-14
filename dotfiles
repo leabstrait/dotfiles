@@ -48,10 +48,10 @@ clone_dotfiles() {
             if [[ $? -eq 0 ]]; then
                 _success "Remote URL changed to SSH"
             else
-                _error "Failed to change remote URL to SSH"
+                _failure "Failed to change remote URL to SSH"
             fi
         else
-            _error "Failed to clone repository"
+            _failure "Failed to clone repository"
         fi
     else
         _process "${DOTFILES_DIR} already exists"
@@ -67,7 +67,7 @@ link_dotfiles() {
             _process "→ Linking ${config_file}"
             filename=${config_file#"$CONFIG_ROOT"}
             if [[ -f $filename ]]; then
-                echo "File $filename already exixts!"
+                echo "File $filename already exists!"
                 echo "Do you want to show the diff between the dotfile and the original file? (y/n)"
                 read REPLY </dev/tty
                 echo
@@ -130,7 +130,6 @@ install_paru() {
         rm -rf $HOME/paru
         _success "→ paru cleaned up"
     fi
-
 }
 
 # Install kompare diff tool
@@ -206,23 +205,23 @@ function dotfiles() {
     # check if the function is provided with arguments
     if [ "$1" = "help" ]; then
         echo "Usage: dotfiles ( <command> <file> | <git commands> )"
-        echo "<command>: track, untrack, backup"
+        echo "<command>: track, untrack, listchanges"
         echo "<file>: the file to track or untrack"
         echo "<git commands>: git commands to be executed"
         echo ""
         echo "Example: dotfiles track .bashrc"
         echo "Example: dotfiles untrack .bashrc"
-        echo "Example: dotfiles commit -m ''"
+        echo "Example: dotfiles commit -m 'commit message'"
         return
     fi
 
     if [ "$1" = "install" ]; then
         install
+        exit 0
     fi
 
     # check if the first argument is a valid command (track, untrack, listchanges) or a git command
     if [ "$1" = "track" ] || [ "$1" = "untrack" ] || [ "$1" = "listchanges" ]; then
-
         local command=$1
         echo "command: $command"
 
@@ -237,6 +236,7 @@ function dotfiles() {
             fi
         else
             echo "No file provided"
+            return
         fi
 
         if [ $command = "track" ]; then
