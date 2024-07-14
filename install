@@ -142,22 +142,22 @@ install_packages() {
   fi
 }
 
-# Enable services from $CONFIG_ROOT/.enabled-services-system and $CONFIG_ROOT/home/$USER/.enabled-services-user
+# Enable services from /.enabled-services-system and $HOME/.enabled-services-user
 enable_services() {
   _process "→ Enabling services"
-  if [ -f $CONFIG_ROOT/.enabled-services-system ]; then
-    sudo systemctl enable $(< $CONFIG_ROOT/.enabled-services-system)
+  if [ -f /.enabled-services-system ]; then
+    sudo systemctl enable $(< /.enabled-services-system)
     _success "→ System services enabled"
     sleep 1
-    sudo systemctl status --no-pager $(< $CONFIG_ROOT/.enabled-services-system)
+    sudo systemctl status --no-pager $(< /.enabled-services-system)
     _success "→ System services status"
     sleep 1
   fi
-  if [ -f $CONFIG_ROOT/home/$USER/.enabled-services-user ]; then
-    systemctl --user enable $(< $CONFIG_ROOT/home/$USER/.enabled-services-user)
+  if [ -f $HOME/.enabled-services-user ]; then
+    systemctl --user enable $(< $HOME/.enabled-services-user)
     _success "→ User services enabled"
     sleep 1
-    systemctl --user status --no-pager $(< $CONFIG_ROOT/home/$USER/.enabled-services-user)
+    systemctl --user status --no-pager $(< $HOME/.enabled-services-user)
     _success "→ User services status"
     sleep 1
   fi
