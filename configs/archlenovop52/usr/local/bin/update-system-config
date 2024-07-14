@@ -1,7 +1,12 @@
 #!/bin/bash
 
-# Write list of explicitly installed packages to a file in the `/` directory
-pacman -Qqe > "/.explicitly-installed-packages"
+# list of packages to ignore
+IGNORE_PACKAGES_LIST=(
+    "paru-bin-debug"
+)
 
+
+# Write list of explicitly installed packages to a file in the `/` directory
+pacman -Qqe | grep -vwE "$(printf "%s|" "${IGNORE_PACKAGES_LIST[@]}")" > "/.explicitly-installed-packages"
 # Write list of enabled services (system) to a file in the `/` directory
 systemctl list-unit-files --type=service,timer --state=running,enabled | grep enabled | cut -d' ' -f1 > "/.enabled-services-system"
