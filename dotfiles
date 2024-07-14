@@ -145,7 +145,7 @@ install_kompare() {
 install_packages() {
     _process "→ Installing packages with paru"
     if [ -f $CONFIG_ROOT/.explicitly-installed-packages ]; then
-        paru -S --needed - <$CONFIG_ROOT/.explicitly-installed-packages
+        paru -S - <$CONFIG_ROOT/.explicitly-installed-packages
         _success "→ Packages installed"
     fi
 }
