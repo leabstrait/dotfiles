@@ -1,0 +1,10 @@
+[Unit]
+Description=Update user configuration files
+After=default.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/update-user-config
+
+[Install]
+WantedBy=default.target

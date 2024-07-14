@@ -1,0 +1,4 @@
+#!/bin/bash
+
+# Write list of enabled services (user) to a file in the USER_HOME directory
+systemctl --user list-unit-files --type=service,timer --state=running,enabled | grep enabled | cut -d' ' -f1 >"$HOME/.enabled-services-user"

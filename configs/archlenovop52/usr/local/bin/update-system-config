@@ -1,0 +1,7 @@
+#!/bin/bash
+
+# Write list of explicitly installed packages to a file in the `/` directory
+pacman -Qqe > "/.explicitly-installed-packages"
+
+# Write list of enabled services (system) to a file in the `/` directory
+systemctl list-unit-files --type=service,timer --state=running,enabled | grep enabled | cut -d' ' -f1 > "/.enabled-services-system"

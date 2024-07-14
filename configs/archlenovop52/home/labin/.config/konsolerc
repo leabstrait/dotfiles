@@ -1,0 +1,17 @@
+MenuBar=Disabled
+
+[Desktop Entry]
+DefaultProfile=konsole.profile
+
+[General]
+ConfigVersion=1
+
+[KonsoleWindow]
+RemoveWindowTitleBarAndFrame=true
+
+[MainWindow]
+MenuBar=Disabled
+ToolBarsMovable=Disabled
+
+[UiSettings]
+ColorScheme=Breeze Light

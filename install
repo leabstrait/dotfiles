@@ -40,7 +40,7 @@ clone_dotfiles() {
     mkdir -p "${DOTFILES_DIR}"
 
     _process "→ Cloning repository to ${DOTFILES_DIR}"
-    git clone "git@github.com:${GITHUB_USER}/${GITHUB_REPO}.git" "${DOTFILES_DIR}"
+    git clone "https://github.com:${GITHUB_USER}/${GITHUB_REPO}.git" "${DOTFILES_DIR}"
 
     [[ $? ]] && _success "${DOTFILES_DIR} created, repository cloned"
 
@@ -66,7 +66,7 @@ link_dotfiles() {
           echo "diff:"
           if [ $filename = ${filename#"$HOME"} ]; then
             # echo  $filename $config_file | xargs code -dw -
-            echo $filename $config_file | xargs sudo meld
+            echo $filename $config_file | xargs sudo kompare
             echo "Do you want to overwrite the original file with the tracked file? (y/n)"
             read REPLY </dev/tty
             if [[ $REPLY =~ ^[Yy]$ ]]; then
@@ -75,7 +75,7 @@ link_dotfiles() {
             echo
           else
             # echo $filename $config_file |xargs  code -dw -
-            echo $filename $config_file | xargs meld
+            echo $filename $config_file | xargs kompare
             echo "Do you want to overwrite the original file with the tracked file? (y/n)"
             read REPLY </dev/tty
             if [[ $REPLY =~ ^[Yy]$ ]]; then
@@ -109,8 +109,8 @@ link_dotfiles() {
 install_paru() {
   if [[ -z $(command -v paru) ]]; then
     _process "→ Installing paru"
-    git clone https://aur.archlinux.org/paru-bin.git ~/paru
-    cd ~/paru
+    git clone https://aur.archlinux.org/paru-bin.git $HOME/paru
+    cd $HOME/paru
     makepkg -si
     cd -
     _success "→ paru installed"
@@ -118,46 +118,46 @@ install_paru() {
     paru -Syu
     _success "→ paru updated"
     _process "→ Cleaning up paru"
-    rm -rf ~/paru
+    rm -rf $HOME/paru
     _success "→ paru cleaned up"
   fi
 
 }
 
-# Install meld diff tool
-install_meld() {
-  if [[ -z $(command -v meld) ]]; then
-    _process "→ Installing meld"
-    paru -S meld
-    _success "→ meld installed"
+# Install kompare diff tool
+install_kompare() {
+  if [[ -z $(command -v kompare) ]]; then
+    _process "→ Installing kompare"
+    paru -S kompare
+    _success "→ kompare installed"
   fi
 }
 
-# Install packages from ~/.explicitly-installed-packages
+# Install packages from $CONFIG_ROOT/.explicitly-installed-packages
 install_packages() {
   _process "→ Installing packages with paru"
-  if [ -f ~/.explicitly-installed-packages ]; then
-    paru -S --needed - <~/.explicitly-installed-packages
+  if [ -f $CONFIG_ROOT/.explicitly-installed-packages ]; then
+    paru -S --needed - <$CONFIG_ROOT/.explicitly-installed-packages
     _success "→ Packages installed"
   fi
 }
 
-# Enable services from ~/.enabled-services-system and ~/.enabled-services-user
+# Enable services from $CONFIG_ROOT/.enabled-services-system and $CONFIG_ROOT/home/$USER/.enabled-services-user
 enable_services() {
   _process "→ Enabling services"
-  if [ -f ~/.enabled-services-system ]; then
-    sudo systemctl enable $(< ~/.enabled-services-system)
+  if [ -f $CONFIG_ROOT/.enabled-services-system ]; then
+    sudo systemctl enable $(< $CONFIG_ROOT/.enabled-services-system)
     _success "→ System services enabled"
     sleep 1
-    sudo systemctl status --no-pager $(< ~/.enabled-services-system)
+    sudo systemctl status --no-pager $(< $CONFIG_ROOT/.enabled-services-system)
     _success "→ System services status"
     sleep 1
   fi
-  if [ -f ~/.enabled-services-user ]; then
-    systemctl --user enable $(< ~/.enabled-services-user)
+  if [ -f $CONFIG_ROOT/home/$USER/.enabled-services-user ]; then
+    systemctl --user enable $(< $CONFIG_ROOT/home/$USER/.enabled-services-user)
     _success "→ User services enabled"
     sleep 1
-    systemctl --user status --no-pager $(< ~/.enabled-services-user)
+    systemctl --user status --no-pager $(< $CONFIG_ROOT/home/$USER/.enabled-services-user)
     _success "→ User services status"
     sleep 1
   fi
@@ -169,13 +169,14 @@ install() {
   echo >"${DOTFILES_INSTALL_LOG}"
 
   install_paru
-  install_meld
+  install_kompare
 
   clone_dotfiles
-  link_dotfiles
 
   install_packages
+  link_dotfiles
   enable_services
+
 }
 
 install

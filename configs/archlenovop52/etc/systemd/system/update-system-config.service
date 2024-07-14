@@ -1,0 +1,12 @@
+[Unit]
+Description=Update system configuration files
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/update-system-config
+User=root
+Group=root
+
+[Install]
+WantedBy=multi-user.target

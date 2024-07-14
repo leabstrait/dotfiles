@@ -27,13 +27,6 @@ run-help() { help "$READLINE_LINE" 2>/dev/null || man "$READLINE_LINE"; }
 bind -m vi-insert -x '"\eh": run-help'
 bind -m emacs -x '"\eh": run-help'
 
-# Write list of explicitly installed packages to  a file in the home directory
-pacman -Qqe > $HOME/.explicitly-installed-packages
-
-# Write list of enabled services(both user and system) to a file in the home directory
-systemctl list-unit-files --type=service,timer --state=running,enabled | grep enabled | cut -d' ' -f1 > $HOME/.enabled-services-system
-systemctl --user list-unit-files --type=service,timer --state=running,enabled | grep enabled | cut -d' ' -f1 > $HOME/.enabled-services-user
-
 # Command not found, suggest package
 source /usr/share/doc/pkgfile/command-not-found.bash
 

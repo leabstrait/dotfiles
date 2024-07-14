@@ -1,0 +1,11 @@
+bluetooth.service
+getty@.service
+NetworkManager-dispatcher.service
+NetworkManager-wait-online.service
+NetworkManager.service
+sddm.service
+systemd-timesyncd.service
+update-system-config.service
+fstrim.timer
+pkgfile-update.timer
+update-system-config.timer
