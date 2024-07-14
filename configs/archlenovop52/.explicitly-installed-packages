@@ -9,6 +9,7 @@ fzf
 git
 google-chrome
 intel-ucode
+kompare
 konsole
 kscreen
 kwallet-pam
@@ -17,7 +18,6 @@ linux
 linux-firmware
 man-db
 man-pages
-kompare
 nano
 networkmanager
 nvidia
@@ -36,5 +36,7 @@ starship
 ttf-ibm-plex
 ttf-ibmplex-mono-nerd
 ttf-jetbrains-mono-nerd
+virtualbox
+virtualbox-host-modules-arch
 visual-studio-code-bin
 zed

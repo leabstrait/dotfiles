@@ -35,9 +35,6 @@ for file in $HOME/.bashrc.d/*.bashrc; do
     source $file
 done
 
-# Source homegrown functions
-source $HOME/dotfiles/dotfiles.sh
-
 # Source fzf
 source /usr/share/fzf/completion.bash
 source /usr/share/fzf/key-bindings.bash
@@ -100,7 +97,7 @@ source /usr/share/nvm/install-nvm-exec
 export LESS="-SRXF"
 
 # Local bin path
-export PATH="$HOME/.local/bin:$PATH"
+export PATH="$HOME/.local/bin:$HOME/dotfiles:$PATH"
 
 # EDITOR variable
 if command -v code &>/dev/null; then
