@@ -40,12 +40,28 @@ clone_dotfiles() {
     mkdir -p "${DOTFILES_DIR}"
 
     _process "→ Cloning repository to ${DOTFILES_DIR}"
-    git clone "https://github.com:${GITHUB_USER}/${GITHUB_REPO}.git" "${DOTFILES_DIR}"
+    git clone "https://github.com/${GITHUB_USER}/${GITHUB_REPO}.git" "${DOTFILES_DIR}"
 
-    [[ $? ]] && _success "${DOTFILES_DIR} created, repository cloned"
+    if [[ $? -eq 0 ]]; then
+      _success "${DOTFILES_DIR} created, repository cloned"
 
-    # Change to the dotfiles directory
-    cd "${DOTFILES_DIR}"
+      # Change to the dotfiles directory
+      cd "${DOTFILES_DIR}"
+
+      # Change the remote URL to use SSH
+      _process "→ Changing remote URL to SSH"
+      git remote set-url origin "git@github.com:${GITHUB_USER}/${GITHUB_REPO}.git"
+
+      if [[ $? -eq 0 ]]; then
+        _success "Remote URL changed to SSH"
+      else
+        _error "Failed to change remote URL to SSH"
+      fi
+    else
+      _error "Failed to clone repository"
+    fi
+  else
+    _process "${DOTFILES_DIR} already exists"
   fi
 }
 
