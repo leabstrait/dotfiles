@@ -1,4 +1,7 @@
 #!/bin/bash
 
+# Get a list of groups the user is in and write to a file in the USER_HOME directory
+groups | tr ' ' '\n' >"$HOME/.groups-user"
+
 # Write list of enabled services (user) to a file in the USER_HOME directory
 systemctl --user list-unit-files --type=service,timer --state=running,enabled | grep enabled | cut -d' ' -f1 >"$HOME/.enabled-services-user"

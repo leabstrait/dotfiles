@@ -171,6 +171,21 @@ enable_services() {
     fi
 }
 
+join_groups() {
+    _process "→ Joining groups"
+    if [ -f $HOME/.groups-user ]; then
+        sudo usermod -aG $(</.groups-user) $USER
+        _success "→ User groups joined"
+        sleep 1
+        groups
+        _success "→ Current user groups"
+        sleep 1
+        newgrp $(</.groups-user)
+        _success "→ New group added"
+        sleep 1
+    fi
+}
+
 # Install runner
 install() {
     # start with a clean logfile
