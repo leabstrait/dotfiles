@@ -3,16 +3,26 @@ Id_1=5644e9cb-b014-4cda-b110-b8f1e41196f1
 Id_2=d5968aee-c045-4d0a-8765-214e83d9de63
 Id_3=089c4b7a-24c5-4ece-8805-77f1141e7983
 Id_4=34526939-5896-4d53-a994-9c6e61701c36
-Id_5=7f75d300-27e9-43a7-8d56-3f4a16887e66
-Number=5
+Number=4
 Rows=1
+
+[ElectricBorders]
+BottomRight=ShowDesktop
+
+[MouseBindings]
+CommandAllWheel=Previous/Next Desktop
 
 [NightColor]
 Active=true
 
 [Plugins]
+dimscreenEnabled=true
 fadedesktopEnabled=true
 slideEnabled=false
+
+[SubSession: 47a0b4de-2d50-4a49-bfb1-83ac6c4ab92a]
+active=-1
+count=0
 
 [Tiling]
 padding=4
