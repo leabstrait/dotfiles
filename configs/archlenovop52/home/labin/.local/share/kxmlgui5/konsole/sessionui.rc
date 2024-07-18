@@ -84,6 +84,6 @@
   <Action name="hamburger_menu"/>
  </ToolBar>
  <ActionProperties scheme="Default">
-  <Action name="split-view-left-right" shortcut="Ctrl+A, Ctrl+\"/>
+  <Action name="split-view-left-right" shortcut=""/>
  </ActionProperties>
 </gui>

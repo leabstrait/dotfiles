@@ -96,12 +96,12 @@ source /usr/share/nvm/install-nvm-exec
 # Config for less
 export LESS="-SRXF"
 
-# Local bin path
-export PATH="$HOME/.local/bin:$HOME/dotfiles:$PATH"
-
 # EDITOR variable
 if command -v code &>/dev/null; then
     export EDITOR=code
 else
     export EDITOR=nano
 fi
+
+# Zellij completions
+eval "$(zellij setup --generate-completion bash)"

@@ -46,4 +46,5 @@ virtualbox
 virtualbox-host-modules-arch
 visual-studio-code-bin
 wireplumber
+zellij
 zram-generator

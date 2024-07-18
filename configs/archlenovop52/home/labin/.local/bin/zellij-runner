@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+
+# set -euo pipefail
+
+# Get the layout directory
+ZJ_LAYOUT_DIR=$(zellij setup --check |
+    grep "LAYOUT DIR" - |
+    grep -o '".*"' - | tr -d '"')
+
+# Function to select or specify a new layout
+select_layout() {
+    if [[ -d "${ZJ_LAYOUT_DIR}" ]]; then
+        ZJ_LAYOUT=$(find "${ZJ_LAYOUT_DIR}" -type f |
+            sed 's|.*/||' |
+            fzf ||
+            exit)
+
+        echo "${ZJ_LAYOUT}"
+    fi
+}
+
+# Get the list of sessions
+ZJ_SESSIONS=$(zellij list-sessions -s)
+NO_SESSIONS=$(echo "${ZJ_SESSIONS}" | wc -l)
+
+# Determine if attaching to an existing session or creating a new one
+if [ "${NO_SESSIONS}" -ge 2 ]; then
+    SESSION=$(echo "${ZJ_SESSIONS}" | fzf || true)
+    if [ -n "${SESSION}" ]; then
+        zellij attach "${SESSION}"
+    else
+        read -p "Enter new session name: " NEW_SESSION
+        LAYOUT=$(select_layout)
+        zellij --layout "${ZJ_LAYOUT_DIR}/${LAYOUT}" attach -c "${NEW_SESSION}"
+    fi
+else
+    read -p "Enter session name to create or press Enter to attach to the only (new) session: " NEW_SESSION
+    if [ -n "${NEW_SESSION}" ]; then
+        LAYOUT=$(select_layout)
+        zellij --layout "${ZJ_LAYOUT_DIR}/${LAYOUT}" attach -c "${NEW_SESSION}"
+    else
+        LAYOUT=$(select_layout)
+        zellij "${ZJ_LAYOUT_DIR}/${LAYOUT}" attach -c
+    fi
+fi

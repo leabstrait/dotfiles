@@ -37,5 +37,5 @@ RollOverDesktops=true
 Scale=1
 
 [org.kde.kdecoration2]
-ButtonsOnLeft=MSFB
+ButtonsOnLeft=MNSFB
 ButtonsOnRight=HILAX

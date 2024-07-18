@@ -264,8 +264,11 @@ _launch=Meta+C
 _launch=Meta+W
 new-private-window=Meta+Shift+W
 
-[services][org.kde.konsole.desktop]
+[services][konsole.desktop]
 _launch=Meta+Return
+
+[services][org.kde.konsole.desktop]
+_launch=Meta+Shift+Return
 
 [services][org.kde.krunner.desktop]
 RunClipboard=Meta+Shift+R
