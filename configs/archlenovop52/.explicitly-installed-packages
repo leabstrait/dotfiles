@@ -10,6 +10,7 @@ fzf
 git
 google-chrome
 gst-plugin-pipewire
+htop
 intel-ucode
 kompare
 konsole
@@ -40,8 +41,10 @@ sddm
 sddm-kcm
 sof-firmware
 starship
+strace
 ttf-ibm-plex
 ttf-ibmplex-mono-nerd
+vim
 virtualbox
 virtualbox-host-modules-arch
 visual-studio-code-bin
