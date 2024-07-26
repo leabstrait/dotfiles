@@ -103,5 +103,6 @@ else
     export EDITOR=nano
 fi
 
-# Zellij completions
-eval "$(zellij setup --generate-completion bash)"
+if command -v tmux &>/dev/null && command -v tmux-runner &>/dev/null && [ -n "$PS1" ] && [[ ! "$TERM" =~ screen ]] && [[ ! "$TERM" =~ tmux ]] && [ -z "$TMUX" ]; then
+    exec tmux-runner && exit
+fi

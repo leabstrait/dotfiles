@@ -1,5 +1,6 @@
 base
 base-devel
+bash-completion
 bat
 bind
 bluedevil
@@ -42,6 +43,8 @@ sddm-kcm
 sof-firmware
 starship
 strace
+tmux
+tmux-bash-completion-git
 ttf-ibm-plex
 ttf-ibmplex-mono-nerd
 vim
@@ -49,5 +52,4 @@ virtualbox
 virtualbox-host-modules-arch
 visual-studio-code-bin
 wireplumber
-zellij
 zram-generator

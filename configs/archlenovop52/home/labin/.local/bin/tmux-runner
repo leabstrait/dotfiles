@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+
+# Function to create a new session
+create_new_session() {
+    local new_session_name=$1
+    if [ -z "$new_session_name" ]; then
+        read -p "Enter new session name (leave empty for an indexed name): " new_session_name
+    fi
+    if [ -n "$new_session_name" ]; then
+        tmux new-session -s "$new_session_name"
+    else
+        tmux new-session
+    fi
+}
+
+# Function to select or specify a new session
+select_session() {
+    local sessions=("$@")
+    local session_count=${#sessions[@]}
+
+    if [ "$session_count" -eq 1 ]; then
+        # A single session exists
+        SESSION=${sessions[0]}
+        echo "A single session exists: $SESSION"
+        read -p "Press Enter to attach to the existing session or enter a new session name to create: " NEW_SESSION
+        if [ -n "$NEW_SESSION" ]; then
+            create_new_session "$NEW_SESSION"
+        else
+            SESSION_NAME=$(echo "$SESSION" | cut -d: -f1)
+            tmux attach-session -d -t "$SESSION_NAME"
+        fi
+    else
+        # More than one session exists
+        SESSION=$(printf "%s\n" "${sessions[@]}" | fzf --reverse --header "jump-to-session" --nth=1 --preview 'tmux capture-pane -pt {1}')
+        if [ -n "$SESSION" ]; then
+            SESSION_NAME=$(echo "$SESSION" | cut -d: -f1)
+            tmux attach-session -d -t "$SESSION_NAME"
+        else
+            create_new_session
+        fi
+    fi
+}
+
+# Main script execution
+main() {
+    # Get the list of sessions
+    local tmux_sessions
+    tmux_sessions=$(tmux list-sessions 2>/dev/null || true)
+
+    # Read session names into an array, filtering out empty lines
+    local sessions=()
+    while IFS= read -r line; do
+        [ -n "$line" ] && sessions+=("$line")
+    done <<<"$tmux_sessions"
+
+    # Determine if attaching to an existing session or creating a new one
+    if [ ${#sessions[@]} -gt 0 ]; then
+        select_session "${sessions[@]}"
+    else
+        echo "No sessions exist. Creating a new session."
+        create_new_session
+    fi
+}
+
+# Run the main function
+main

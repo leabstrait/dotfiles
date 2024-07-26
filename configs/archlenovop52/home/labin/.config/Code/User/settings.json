@@ -199,30 +199,5 @@
         "editor.defaultFormatter": "esbenp.prettier-vscode"
     },
     "terminal.integrated.sendKeybindingsToShell": true,
-    "terminal.integrated.allowChords": true,
-    "terminal.integrated.profiles.linux": {
-        "zellij": {
-            "path": "zellij-runner",
-            "icon": "terminal-tmux"
-        },
-        "bash": {
-            "path": "bash",
-            "icon": "terminal-bash"
-        },
-        "zsh": {
-            "path": "zsh"
-        },
-        "fish": {
-            "path": "fish"
-        },
-        "tmux": {
-            "path": "tmux",
-            "icon": "terminal-tmux"
-        },
-        "pwsh": {
-            "path": "pwsh",
-            "icon": "terminal-powershell"
-        }
-    },
-    "terminal.integrated.defaultProfile.linux": "zellij"
+    "terminal.integrated.allowChords": false,
 }
