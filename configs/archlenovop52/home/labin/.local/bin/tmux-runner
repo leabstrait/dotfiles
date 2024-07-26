@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 
+# Function to handle Ctrl+C
+handle_ctrl_c() {
+    echo -e "\nSession creation interrupted. Exiting."
+    exit 1
+}
+
 # Function to create a new session
 create_new_session() {
     local new_session_name=$1
@@ -43,6 +49,9 @@ select_session() {
 
 # Main script execution
 main() {
+    # Set up trap for Ctrl+C
+    trap handle_ctrl_c SIGINT
+
     # Get the list of sessions
     local tmux_sessions
     tmux_sessions=$(tmux list-sessions 2>/dev/null || true)
