@@ -6,7 +6,7 @@ switch-to-activity-d60ebd74-8cb2-428a-b82b-009f52f0cd96=none,none,Switch to acti
 [KDE Keyboard Layout Switcher]
 Switch keyboard layout to English (UK)=none,none,Switch keyboard layout to English (UK)
 Switch keyboard layout to Nepali=none,none,Switch keyboard layout to Nepali
-Switch to Last-Used Keyboard Layout=none,Meta+Alt+L,Switch to Last-Used Keyboard Layout
+Switch to Last-Used Keyboard Layout=,Meta+Alt+L,Switch to Last-Used Keyboard Layout
 Switch to Next Keyboard Layout=Meta+Space,Meta+Alt+K,Switch to Next Keyboard Layout
 _k_friendly_name=Keyboard Layout Switcher
 
@@ -264,11 +264,8 @@ _launch=Meta+C
 _launch=Meta+W
 new-private-window=Meta+Shift+W
 
-[services][konsole.desktop]
-_launch=Meta+Return
-
 [services][org.kde.konsole.desktop]
-_launch=Meta+Shift+Return
+_launch=Meta+Return
 
 [services][org.kde.krunner.desktop]
 RunClipboard=Meta+Shift+R
