@@ -1,0 +1,85 @@
+$include /etc/inputrc
+
+# Bell Style
+# none, visible or audible
+set bell-style audible
+
+# Default Readline Mode
+# Set the default readline mode as vi
+set editing-mode vi
+
+# Show the vi mode indicators
+set show-mode-in-prompt on
+
+# Mode Indicators and Cursor Color
+$if term=linux
+    # Vi Insert Mode Indicator
+    set vi-ins-mode-string \1\e[1;38;2;56;58;66m\e[48;2;80;160;80m I \e[0m\2 \e[?2c
+
+    # Vi Command Mode Indicator
+    set vi-cmd-mode-string \1\e[1;38;2;56;58;66m\e[48;2;194;132;2m C \e[0m\2 \e[?8c
+$else
+    # Vi Insert Mode Indicator with Cursor Color
+    set vi-ins-mode-string \1\e[1;38;2;56;58;66m\e[48;2;80;160;80m I \e[0m\2 \e[5 q\1\e]12;#50A050\a\2
+
+    # Vi Command Mode Indicator with Cursor Color
+    set vi-cmd-mode-string \1\e[1;38;2;56;58;66m\e[48;2;194;132;2m C \e[0m\2 \e[1 q\1\e]12;#C28402\a\2
+$endif
+
+# Keybindings
+# Tab should cycle through multiple matches for completion
+TAB: menu-complete
+
+# Shift-Tab should cycle backwards through matches
+"\e[Z": menu-complete-backward
+
+# Clear screen in command mode
+# "\C-l": clear-display
+
+# Display a list of matching files
+set show-all-if-ambiguous on
+
+# Perform partial (common) completion on the first Tab press,
+# only start cycling full results on the second Tab press (bash 5+)
+set menu-complete-display-prefix on
+
+# Cycle through history based on characters already typed on the line
+$if mode=vi
+    # For vi-command mode
+    set keymap vi-command
+    "\e[A": history-search-backward
+    "\e[B": history-search-forward
+    j: history-search-forward
+    k: history-search-backward
+    "\e[1;5C": forward-word
+    "\e[1;5D": backward-word
+
+    # For vi-insert mode
+    set keymap vi-insert
+    "\e[A": history-search-backward
+    "\e[B": history-search-forward
+    "\e[1;5C": forward-word
+    "\e[1;5D": backward-word
+$endif
+
+# Bracketed Paste Mode
+set enable-bracketed-paste on
+
+# Visible Control Characters
+set echo-control-characters on
+
+# File and Directory Color Settings
+# Color files by type
+set colored-stats On
+
+# Append char to indicate type
+set visible-stats On
+
+# Mark symlinked directories
+set mark-symlinked-directories On
+
+# Color the common prefix in completion
+set colored-completion-prefix On
+
+# Color the common prefix in menu-complete
+set menu-complete-display-prefix On

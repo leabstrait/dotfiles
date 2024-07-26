@@ -23,9 +23,10 @@ shopt -s extglob                 # Extended pattern
 shopt -s no_empty_cmd_completion # No empty completion
 
 # Run help
-run-help() { help "$READLINE_LINE" 2>/dev/null || man "$READLINE_LINE"; }
-bind -m vi-insert -x '"\eh": run-help'
-bind -m emacs -x '"\eh": run-help'
+function run-help() {
+    help "$READLINE_LINE" 2>/dev/null || man "$READLINE_LINE"
+}
+bind -m vi-insert -x '"\em": run-help' # Esc + m for manpage
 
 # Command not found, suggest package
 source /usr/share/doc/pkgfile/command-not-found.bash
@@ -59,28 +60,6 @@ HISTFILE=~/.bash_history
 HISTSIZE=1000
 SAVEHIST=500
 HISTCONTROL=ignoreboth:erasedups
-
-# Keybindings
-
-# If there are multiple matches for completion, Tab should cycle through them
-bind 'TAB:menu-complete'
-# And Shift-Tab should cycle backwards
-bind '"\e[Z": menu-complete-backward'
-
-# Display a list of the matching files
-bind "set show-all-if-ambiguous on"
-
-# Perform partial (common) completion on the first Tab press, only start
-# cycling full results on the second Tab press (from bash version 5)
-bind "set menu-complete-display-prefix on"
-
-# Cycle through history based on characters already typed on the line
-bind '"\e[A":history-search-backward'
-bind '"\e[B":history-search-forward'
-
-# Keep Ctrl-Left and Ctrl-Right working when the above are used
-bind '"\e[1;5C":forward-word'
-bind '"\e[1;5D":backward-word'
 
 # Other settings
 WORDCHARS=${WORDCHARS//\/[&.;]/}            # Don't consider certain characters part of the word
