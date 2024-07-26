@@ -52,4 +52,5 @@ virtualbox
 virtualbox-host-modules-arch
 visual-studio-code-bin
 wireplumber
+wl-clipboard
 zram-generator
