@@ -211,7 +211,7 @@ function dotfiles() {
     if [[ $(command -v kompare) ]]; then
         DIFFTOOL="kompare"
     else
-        DIFFTOOL="diff"
+        DIFFTOOL="diff --color"
     fi
 
     CONFIG_ROOT="$DOTFILES_DIR/configs/$(hostnamectl hostname)"
