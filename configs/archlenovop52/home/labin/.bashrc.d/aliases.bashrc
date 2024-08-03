@@ -10,16 +10,13 @@ alias mkdir='mkdir -vp'    # Makedir (verbose, parents)
 alias mv="mv -iv"          # Move    (recursive, verbose, interactive))
 alias rm="rm -riv"         # Remove  (recursive, verbose, interactive)
 alias tree="eza --tree"
-alias fcd="cd ~ && cd \$(find * -type d | fzf)"
 
 alias rs="rsync -r --info=progress2" # Rsync with progress bar
 
 # # crypto
 # alias gpg="gpg -c --no-symkey-cache --cipher-algo AES256" # Encrypt with AES256
 
-# editor
-alias v="vim"          # Shorter editor command
-alias sv="sudo -E vim" # Edit file as root with nano
+# bat is cat
 export BAT_THEME="GitHub"
 alias cat="bat"
 
