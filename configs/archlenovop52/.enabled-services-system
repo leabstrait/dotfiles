@@ -6,6 +6,7 @@ NetworkManager.service
 sddm.service
 systemd-timesyncd.service
 update-system-config.service
+warp-svc.service
 fstrim.timer
 pkgfile-update.timer
 update-system-config.timer
