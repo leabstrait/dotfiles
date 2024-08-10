@@ -1,3 +1,4 @@
+alacritty
 base
 base-devel
 bash-completion
@@ -14,7 +15,6 @@ gst-plugin-pipewire
 htop
 intel-ucode
 kompare
-konsole
 kscreen
 kwallet-pam
 kwalletmanager
