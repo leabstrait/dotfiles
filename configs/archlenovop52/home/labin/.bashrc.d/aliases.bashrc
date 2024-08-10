@@ -17,7 +17,6 @@ alias rs="rsync -r --info=progress2" # Rsync with progress bar
 # alias gpg="gpg -c --no-symkey-cache --cipher-algo AES256" # Encrypt with AES256
 
 # bat is cat
-export BAT_THEME="GitHub"
 alias cat="bat"
 
 # utils

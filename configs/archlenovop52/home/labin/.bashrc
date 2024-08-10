@@ -12,19 +12,17 @@
 # If not running interactively, don't do anything
 [[ $- != *i* ]] && return
 
-# PATH
-export PATH="$HOME/.local/bin:$HOME/dotfiles:$PATH"
-
-source $HOME/.bashrc.d/fzf.bashrc
-
-if command -v tmux &>/dev/null && command -v tmux-runner &>/dev/null && [ -n "$PS1" ] && [[ ! "$TERM" =~ screen ]] && [[ ! "$TERM" =~ tmux ]] && [ -z "$TMUX" ]; then
-    exec tmux-runner && exit
-fi
-
 # source all files in .bashrc.d directory
 for file in $HOME/.bashrc.d/*.bashrc; do
     source $file
 done
+
+if command -v tmux &>/dev/null && command -v fztmx &>/dev/null && [ -n "$PS1" ] && [[ ! "$TERM" =~ screen ]] && [[ ! "$TERM" =~ tmux ]] && [ -z "$TMUX" ]; then
+    fztmx && exit
+fi
+
+# PATH
+export PATH="$HOME/.local/bin:$HOME/dotfiles:$PATH"
 
 # Options
 shopt -s autocd                  # if only directory path is entered, cd there.
@@ -59,9 +57,9 @@ SAVEHIST=500
 HISTCONTROL=ignoreboth:erasedups
 
 # Other settings
-WORDCHARS=${WORDCHARS//\/[&.;]/}            # Don't consider certain characters part of the word
-PROMPT_EOL_MARK=''                          # Removes the trailing % at the end of newlines
-export SUDO_PROMPT=$'\e[33mPassword:\e[0m ' # Make the sudo prompt simpler and colorful
+WORDCHARS=${WORDCHARS//\/[&.;]/}                        # Don't consider certain characters part of the word
+PROMPT_EOL_MARK=''                                      # Removes the trailing % at the end of newlines
+export SUDO_PROMPT=$'\e[38;2;207;34;46mPassword:\e[0m ' # Make the sudo prompt simpler and colorful
 
 # Config for less
 export LESS="-SRXF"

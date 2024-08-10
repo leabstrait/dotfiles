@@ -9,6 +9,7 @@ cloudflare-warp-bin
 dolphin
 efibootmgr
 eza
+fastfetch
 fzf
 git
 google-chrome
@@ -48,6 +49,7 @@ tmux
 tmux-bash-completion-git
 ttf-ibm-plex
 ttf-ibmplex-mono-nerd
+vifm
 vim
 virtualbox
 virtualbox-host-modules-arch
