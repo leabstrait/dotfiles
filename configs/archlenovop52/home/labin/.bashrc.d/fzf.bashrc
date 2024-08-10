@@ -34,9 +34,9 @@ export FZF_DEFAULT_OPTS="$FZF_DEFAULT_OPTS
     --color header:#1b7c83
     --color label:#1b7c83
     --color scrollbar:#1b7c83,preview-scrollbar:#1b7c83
-    --color pointer:#218bff,marker:#218bff,spinner:#1b7c83
-    --color prompt:#218bff,info:#1b7c83
-    --color hl:#0969da,hl+:#218bff
+    --color pointer:#0969da,marker:#0969da,spinner:#1b7c83
+    --color prompt:#0969da,info:#1b7c83
+    --color hl:#218bff,hl+:#0969da
     --color separator:#6e7781
 "
 export FZF_CTRL_R_OPTS="
