@@ -77,7 +77,6 @@
         ["(", ")"]
     ],
     "editor.linkedEditing": true,
-    "editor.mouseWheelZoom": true,
     "editor.renderControlCharacters": true,
     "editor.renderLineHighlight": "all",
     "editor.renderWhitespace": "all",
@@ -188,12 +187,11 @@
     "files.associations": {
         "*.j2": "jinja-html"
     },
-    "window.zoomLevel": -0.5,
+    "window.zoomLevel": -0.75,
+    "window.zoomPerWindow": false,
     "super-figure.vectorFigureEditor": "/usr/bin/inkscape",
     "super-figure.bitmapFigureEditor": "/usr/bin/gimp",
-    "blockman.n04ColorComboPreset": "Classic Light (Gradients)",
-    "workbench.colorTheme": "Default Light Modern",
-    "workbench.preferredDarkColorTheme": "Visual Studio Dark",
+    "workbench.colorTheme": "GitHub Light",
     "files.insertFinalNewline": true,
     "[javascriptreact]": {
         "editor.defaultFormatter": "esbenp.prettier-vscode"
