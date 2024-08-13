@@ -197,5 +197,6 @@
         "editor.defaultFormatter": "esbenp.prettier-vscode"
     },
     "terminal.integrated.sendKeybindingsToShell": true,
-    "terminal.integrated.allowChords": false
+    "terminal.integrated.allowChords": false,
+    "terminal.integrated.minimumContrastRatio": 1
 }
