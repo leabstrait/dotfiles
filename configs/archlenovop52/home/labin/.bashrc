@@ -47,9 +47,6 @@ source /usr/share/doc/pkgfile/command-not-found.bash
 export MANPAGER="sh -c 'col -bx | bat -l man -p'"
 export MANROFFOPT="-c"
 
-# Prompt
-eval "$(starship init bash)"
-
 # History settings
 HISTFILE=~/.bash_history
 HISTSIZE=1000
@@ -64,11 +61,17 @@ export SUDO_PROMPT=$'\e[38;2;207;34;46mPassword:\e[0m ' # Make the sudo prompt s
 # Config for less
 export LESS="-SRXF"
 
-# EDITOR variable
-if command -v code &>/dev/null; then
-    export EDITOR=code
-else
-    export EDITOR=vim
-fi
+# Environment variables
+export EDITOR=vim
+export TERM=alacritty-direct
+export TERMINAL=alacritty
+
+# Prompt
+eval "$(starship init bash)"
+
+# Binds
+bind -x '"\ep": fzpm'  # Esc + p for fzpm
+bind -x '"\et": fztmx' # Esc + t for fztmx
+bind -x '"\ef": vifm'  # Esc + f for vifm
 
 fastfetch

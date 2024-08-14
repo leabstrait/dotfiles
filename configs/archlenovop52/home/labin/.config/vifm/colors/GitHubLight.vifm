@@ -1,0 +1,165 @@
+" vim: filetype=vifm :
+
+" This is Vifm's color scheme customized to match the "GitHub Light" theme for terminals that support 256 colors.
+" Last updated: 11.08.2024
+
+" You can edit this file by hand.
+" The " character at the beginning of a line comments out the line.
+" Blank lines are ignored.
+
+" The Default color scheme is used for any directory that does not have
+" a specified scheme and for parts of user interface like menus. A
+" color scheme set for a base directory will also
+" be used for the subdirectories.
+
+" The standard ncurses colors are:
+" Default=-1=None, can be used for transparency or default color
+" Black=0
+" Red=1
+" Green=2
+" Yellow=3
+" Blue=4
+" Magenta=5
+" Cyan=6
+" White=7
+
+" Light versions of colors are also available (they set bold
+" attribute in terminals with less than 16 colors):
+" LightBlack
+" LightRed
+" LightGreen
+" LightYellow
+" LightBlue
+" LightMagenta
+" LightCyan
+" LightWhite
+
+" Available attributes (some of them can be combined):
+" bold
+" underline
+" reverse or inverse
+" standout
+" italic (on unsupported systems becomes reverse)
+" combine
+" none
+
+" Vifm supports 256 colors; you can use color numbers 0-255
+" (requires properly set up terminal: set your TERM environment variable
+" (directly or using resources) to some color terminal name (e.g.
+" xterm-256color) from /usr/lib/terminfo/; you can check the current number
+" of colors in your terminal with the tput colors command)
+
+" highlight group cterm=attrs ctermfg=foreground_color ctermbg=background_color
+
+highlight clear
+
+" General window and interface colors
+highlight Win          gui=none                    guifg=#1f2328        guibg=default
+highlight AuxWin       gui=none                    guifg=#1f2328        guibg=default
+highlight OtherWin     gui=none                    guifg=#000000        guibg=default
+highlight Border       gui=none                    guifg=#6e7781        guibg=default
+
+" Top line and tab line colors
+highlight TopLine      gui=bold                    guifg=#633c01        guibg=default
+highlight TopLineSel   gui=bold                    guifg=#633c01        guibg=default
+
+highlight TabLine      gui=bold                    guifg=#ffffff        guibg=#6e7781
+highlight TabLineSel   gui=bold                    guifg=#ffffff        guibg=#1b7c83
+
+" Job and status line colors
+highlight JobLine      gui=bold                    guifg=#1f2328        guibg=default
+highlight StatusLine   gui=none                    guifg=#1f2328        guibg=default
+
+" Line highlighting
+highlight CurrLine     gui=bold,reverse            guifg=default        guibg=default
+highlight OtherLine    gui=none                    guifg=default        guibg=default
+highlight OddLine                                  guifg=default        guibg=default
+highlight LineNr                                   guifg=#1f2328        guibg=default
+
+" Selected line and comparison colors
+
+highlight Selected     gui=bold                    guifg=#4d2d00        guibg=default
+highlight CmpMismatch  gui=bold                    guifg=#ffffff        guibg=default
+highlight CmpUnmatched gui=bold                    guifg=#ffffff        guibg=default
+highlight CmpBlank                                 guifg=#1f2328        guibg=default
+
+" Suggestion and command line colors
+highlight SuggestBox   gui=bold,reverse            guifg=#0969da        guibg=default
+highlight WildMenu     gui=underline,bold,reverse  guifg=#0969da        guibg=default
+
+highlight CmdLine      gui=bold                    guifg=#1f2328        guibg=default
+highlight ErrorMsg     gui=bold                    guifg=#cf222e        guibg=default
+
+" File and directory colors
+highlight Directory    gui=none                    guifg=#0969da        guibg=default
+highlight Executable   gui=none                    guifg=#1a7f37        guibg=default
+highlight Socket       gui=none,reverse            guifg=#633c01        guibg=default
+highlight Device       gui=none,reverse            guifg=#cf222e        guibg=default
+highlight Fifo         gui=none,reverse            guifg=#1a7f37        guibg=default
+highlight Link         gui=none                    guifg=#116329        guibg=default
+highlight BrokenLink   gui=none                    guifg=#cf222e        guibg=default
+highlight HardLink     gui=none                    guifg=#633c01        guibg=default
+
+" Colors for statusline
+highlight User1        gui=none                    guifg=#ffffff        guibg=#633c01
+highlight User2        gui=bold                    guifg=default        guibg=default
+highlight User3        gui=bold                    guifg=#116329        guibg=default
+highlight User4        gui=bold                    guifg=#ffffff        guibg=#0969da
+highlight User5        gui=bold                    guifg=#cf222e        guibg=default
+highlight User6        gui=bold                    guifg=#ffffff        guibg=#116329
+
+" File type-specific colors
+
+" Build system files
+highlight {Makefile,Makefile.am,Makefile.in,Makefile.win,*.mak,*.mk,*.m4,*.ac,
+          \configure,CMakeLists.txt,*.cmake,*.pro,*.pri,*.sln,meson.build,
+          \meson_options.txt}
+        \ gui=none guifg=#1a7f37        guibg=default
+" Archives
+highlight {*.7z,*.ace,*.arj,*.bz2,*.cpio,*.deb,*.dz,*.gz,*.jar,*.lzh,*.lzma,
+          \*.rar,*.rpm,*.rz,*.tar,*.taz,*.tb2,*.tbz,*.tbz2,*.tgz,*.tlz,*.trz,
+          \*.txz,*.tz,*.tz2,*.xz,*.z,*.zip,*.zoo,*.apk,*.gzip,*.lz}
+        \ gui=none guifg=#633c01        guibg=default
+" Configuration and other readable textual formats
+highlight {*.css,*.less,*.scss,*.markdown,*.md,*.mkd,*.org,*.pandoc,*.pdc,*.tex,
+          \*.txt,*.xml,*.log,*.rss,*.xul,*.json,*.yaml,*.yml,*.csv,*.plist,
+          \*.ini,*.cfg,*.rc,*.conf,*.spec,*.qrc,*.description,*.list,*.log.old,
+          \*.log.1,*.log.2,*.log.3,*.log.4,*.log.5,*.log.6,*.log.7,*.log.8,
+          \syslog,syslog.1}
+        \ gui=none guifg=#1f2328        guibg=default
+" Still text files, but keeping this unoptimizable glob separately
+highlight {*[^0-9].[1-9]}
+        \ gui=none guifg=#1f2328        guibg=default
+" Documents and text-based formats that need special handling
+highlight {*.doc,*.docx,*.xls,*.xlsm,*.xlsx,*.mobi,*.rtf,*.ppt,*.pptx,*.pdf,
+          \*.epub,*.fb2,*.djvu,*.djv,*.htm,*.html,*.shtml,*.xhtml,*.desktop,
+          \*.odg,*.odt,*.ods}
+        \ gui=none guifg=#8250df        guibg=default
+" Audio
+highlight {*.aac,*.ac3,*.anx,*.ape,*.asf,*.au,*.axa,*.cue,*.flac,*.m2a,*.m4a,
+          \*.mid,*.midi,*.mka,*.mp3,*.mpc,*.mpga,*.oga,*.ogg,*.ogx,*.ra,*.ram,
+          \*.spx,*.wav,*.wma}
+        \ gui=none guifg=#8250df        guibg=default
+" Multimedia
+highlight {*.avi,*.axv,*.divx,*.flv,*.m2v,*.m4v,*.mp4,*.m4p,*.mp4v,*.mpeg,*.mpg,
+          \*.mkv,*.mov,*.nuv,*.ogv,*.qt,*.rm,*.ts,*.vob,*.webm,*.wmv,*.xvid,
+          \*.unknown_video}
+        \ gui=none guifg=#1a7f37        guibg=default
+" Images
+highlight {*.bmp,*.gif,*.jpeg,*.jpg,*.ico,*.png,*.ppm,*.svg,*.svgz,*.tga,*.tif,
+          \*.tiff,*.xbm,*.xcf,*.xpm,*.xspf,*.xwd,*.ai,*.pbm,*.pgm,*.webp}
+        \ gui=none guifg=#8250df        guibg=default
+" Executables
+highlight {*.sh,*.bash,*.zsh,*.bat,*.btm,*.cmd,*.com,*.dll,*.exe,*.run,*.msu,
+          \*.msi,*.fish,*.AppImage}
+        \ gui=none guifg=#1a7f37        guibg=default
+" Source code
+highlight {*.patch,*.diff,*.py,*.cpp,*.hpp,*.c,*.h,*.cpp,*.hpp,*.cc,*.hh,*.ld,
+          \*.hs,*.php,*.lua,*.vim,*.vifm,*.asm,*.s,*.java,*.cxx,*.c++,*.go,
+          \*.pl,*.pm,*.t,*.cs,*.asp,*.dart,*.js,*.rb,*.scala,*.ts,*.coffee,
+          \*.ml,*.mli,*.rs,*.sql,*.qml,vifmrc,vimrc,.vimrc,*.flex,*.ypp,*.S}
+        \ gui=none guifg=#116329        guibg=default
+" Software documentation
+highlight {COPYRIGHT,COPYING*,BUGS,ChangeLog*,FAQ,INSTALL*,LICENCE,LICENSE,NEWS,
+          \README,README.*,AUTHORS,TODO,THANKS}
+        \ gui=none guifg=#0969da        guibg=default

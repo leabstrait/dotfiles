@@ -91,18 +91,21 @@ set nohlsearch
 set incsearch
 
 " Try to leave some space from cursor to upper/lower border in lists
-set scrolloff=4
+set scrolloff=8
 
 " Don't do too many requests to slow file systems
 if !has('win')
     set slowfs=curlftpfs
 endif
 
-" Set custom status line look
-set statusline="  Hint: %z%= %A %10u:%-7g %15s %20d  "
+" Set custom status line look with powerline-inspired segments
+set statusline='%1* %t %2* %= %3* %s %4* %A %5* %5u:%-5g %6* %{&sort} '
+
+" Ruler format
+set rulerformat='%2l-%S%[ +%x%]'
 
 " List of color schemes to try (picks the first one supported by the terminal)
-colorscheme Default-256 Default
+colorscheme GitHubLight
 
 " ------------------------------------------------------------------------------
 " Bookmarks
@@ -110,9 +113,9 @@ colorscheme Default-256 Default
 
 " :mark mark /full/directory/path [filename]
 
-mark b ~/bin/
 mark h ~/
-
+mark b ~/.local/bin/
+mark d ~/dotfiles
 " ------------------------------------------------------------------------------
 " Commands
 " ------------------------------------------------------------------------------
@@ -428,6 +431,7 @@ filextype */
 
 " Customize view columns a bit (enable ellipsis for truncated file names)
 " set viewcolumns=-{name}..,6{}.
+set viewcolumns=-80%{name}
 
 " Show vertical border
 " set fillchars=vborder:│
@@ -448,6 +452,12 @@ nnoremap S :sort<cr>
 " Toggle visibility of preview window
 nnoremap w :view<cr>
 vnoremap w :view<cr>gv
+
+" Toggle show hidden files with .
+nnoremap . za
+
+" Spacebar to select
+nnoremap <space> t
 
 if $DISPLAY && executable('gvim')
     " Open file in existing instance of gvim
@@ -545,7 +555,11 @@ nnoremap <c-u> <c-w>x
 " let $PATH = $HOME.'/bin/fuse:'.$PATH
 
 " Block particular shortcut
-" nnoremap <left> <nop>
+
+nnoremap <up> <nop>
+nnoremap <left> <nop>
+nnoremap <down> <nop>
+nnoremap <right> <nop>
 
 " Export IPC name of current instance as environment variable and use it to
 " communicate with the instance later.
@@ -563,4 +577,73 @@ nnoremap <c-u> <c-w>x
 " Icon decorations example
 " ------------------------------------------------------------------------------
 
+" Ranger devicons for ViFM
 " https://github.com/cirala/vifm_devicons
+"
+" Filetypes/directories
+set classify=' :dir:/, :exe:, :reg:, :link:,? :?:, ::../::'
+
+" Specific files
+set classify+=' ::.Xdefaults,,.Xresources,,.bashprofile,,.bash_profile,,.bashrc,,.dmrc,,.d_store,,.fasd,,.gitconfig,,.gitignore,,.jack-settings,,.mime.types,,.nvidia-settings-rc,,.pam_environment,,.profile,,.recently-used,,.selected_editor,,.xinitpurc,,.zprofile,,.yarnc,,.snclirc,,.tmux.conf,,.urlview,,.config,,.ini,,.user-dirs.dirs,,.mimeapps.list,,.offlineimaprc,,.msmtprc,,.Xauthority,,config::'
+set classify+=' ::dropbox::'
+set classify+=' ::favicon.*,,README,,readme::'
+set classify+=' ::.vim,,.vimrc,,.gvimrc,,.vifm::'
+set classify+=' ::gruntfile.coffee,,gruntfile.js,,gruntfile.ls::'
+set classify+=' ::gulpfile.coffee,,gulpfile.js,,gulpfile.ls::'
+set classify+=' ::ledger::'
+set classify+=' ::license,,copyright,,copying,,LICENSE,,COPYRIGHT,,COPYING::'
+set classify+=' ::node_modules::'
+set classify+=' ::react.jsx::'
+
+" File extensions
+set classify+='λ ::*.ml,,*.mli::'
+set classify+=' ::*.styl::'
+set classify+=' ::*.scss::'
+set classify+=' ::*.py,,*.pyc,,*.pyd,,*.pyo::'
+set classify+=' ::*.php::'
+set classify+=' ::*.markdown,,*.md::'
+set classify+=' ::*.json::'
+set classify+=' ::*.js::'
+set classify+=' ::*.bmp,,*.gif,,*.ico,,*.jpeg,,*.jpg,,*.png,,*.svg,,*.svgz,,*.tga,,*.tiff,,*.xmb,,*.xcf,,*.xpm,,*.xspf,,*.xwd,,*.cr2,,*.dng,,*.3fr,,*.ari,,*.arw,,*.bay,,*.crw,,*.cr3,,*.cap,,*.data,,*.dcs,,*.dcr,,*.drf,,*.eip,,*.erf,,*.fff,,*.gpr,,*.iiq,,*.k25,,*.kdc,,*.mdc,,*.mef,,*.mos,,*.mrw,,*.obm,,*.orf,,*.pef,,*.ptx,,*.pxn,,*.r3d,,*.raf,,*.raw,,*.rwl,,*.rw2,,*.rwz,,*.sr2,,*.srf,,*.srw,,*.tif,,*.x3f,,*.webp,,*.avif,,*.jxl::'
+set classify+=' ::*.ejs,,*.htm,,*.html,,*.slim,,*.xml::'
+set classify+=' ::*.mustasche::'
+set classify+=' ::*.css,,*.less,,*.bat,,*.conf,,*.ini,,*.rc,,*.yml,,*.cfg::'
+set classify+=' ::*.rss::'
+set classify+=' ::*.coffee::'
+set classify+=' ::*.twig::'
+set classify+=' ::*.c++,,*.cpp,,*.cxx,,*.h::'
+set classify+=' ::*.cc,,*.c::'
+set classify+=' ::*.hs,,*.lhs::'
+set classify+=' ::*.lua::'
+set classify+=' ::*.jl::'
+set classify+=' ::*.go::'
+set classify+=' ::*.ts::'
+set classify+=' ::*.db,,*.dump,,*.sql::'
+set classify+=' ::*.sln,,*.suo::'
+set classify+=' ::*.exe::'
+set classify+=' ::*.diff,,*.sum,,*.md5,,*.sha512::'
+set classify+=' ::*.scala::'
+set classify+=' ::*.java,,*.jar::'
+set classify+=' ::*.xul::'
+set classify+=' ::*.clj,,*.cljc::'
+set classify+=' ::*.pl,,*.pm,,*.t::'
+set classify+=' ::*.cljs,,*.edn::'
+set classify+=' ::*.rb::'
+set classify+=' ::*.fish,,*.sh,,*.bash::'
+set classify+=' ::*.dart::'
+set classify+=' ::*.f#,,*.fs,,*.fsi,,*.fsscript,,*.fsx::'
+set classify+=' ::*.rlib,,*.rs::'
+set classify+=' ::*.d::'
+set classify+=' ::*.erl,,*.hrl::'
+set classify+=' ::*.ai::'
+set classify+=' ::*.psb,,*.psd::'
+set classify+=' ::*.jsx::'
+set classify+=' ::*.aac,,*.anx,,*.asf,,*.au,,*.axa,,*.flac,,*.m2a,,*.m4a,,*.mid,,*.midi,,*.mp3,,*.mpc,,*.oga,,*.ogg,,*.ogx,,*.ra,,*.ram,,*.rm,,*.spx,,*.wav,,*.wma,,*.ac3::'
+set classify+=' ::*.avi,,*.flv,,*.mkv,,*.mov,,*.mp4,,*.mpeg,,*.mpg,,*.webm,,*.av1::'
+set classify+=' ::*.epub,,*.pdf,,*.fb2,,*.djvu::'
+set classify+=' ::*.7z,,*.apk,,*.bz2,,*.cab,,*.cpio,,*.deb,,*.gem,,*.gz,,*.gzip,,*.lh,,*.lzh,,*.lzma,,*.rar,,*.rpm,,*.tar,,*.tgz,,*.xz,,*.zip,,*.zst::'
+set classify+=' ::*.cbr,,*.cbz::'
+set classify+=' ::*.log::'
+set classify+=' ::*.doc,,*.docx,,*.adoc::'
+set classify+=' ::*.xls,,*.xlsmx::'
+set classify+=' ::*.pptx,,*.ppt::'

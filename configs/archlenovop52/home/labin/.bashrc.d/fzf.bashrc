@@ -27,6 +27,7 @@ CTRL-Y: copy selection into clipboard
 
 '
 "
+
 # colors (GitHub Light)
 export FZF_DEFAULT_OPTS="$FZF_DEFAULT_OPTS
     --color bg+:#ffffff,fg+:#1f2328
@@ -42,14 +43,17 @@ export FZF_DEFAULT_OPTS="$FZF_DEFAULT_OPTS
 export FZF_CTRL_R_OPTS="
     --preview 'echo {}'
     --preview-window 'down:3:hidden:wrap'
+    --height 70%
 "
 
 export FZF_ALT_C_OPTS="
     --preview 'eza --color=always --tree {}'
+    --height 70%
 "
 
 export FZF_CTRL_T_OPTS="
     --preview '(bat --color=always {} || eza --color=always --tree {}) 2> /dev/null'
+    --height 70%
 "
 
 # fzf and paru
