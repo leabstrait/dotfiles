@@ -30,16 +30,18 @@ CTRL-Y: copy selection into clipboard
 
 # colors (GitHub Light)
 export FZF_DEFAULT_OPTS="$FZF_DEFAULT_OPTS
-    --color bg+:#ffffff,fg+:#1f2328
-    --color fg:#6e7781
+    --color bg:#ffffff,fg:#1f2328
+    --color bg+:#ffffff,fg+:#0969da
     --color header:#1b7c83
     --color label:#1b7c83
+    --color border:#1f2328,preview-border:#1f2328
     --color scrollbar:#1b7c83,preview-scrollbar:#1b7c83
     --color pointer:#0969da,marker:#0969da,spinner:#1b7c83
     --color prompt:#0969da,info:#1b7c83
-    --color hl:#218bff,hl+:#0969da
-    --color separator:#6e7781
+    --color hl:#a40e26,hl+:#cf222e
+    --color separator:#1f2328
 "
+
 export FZF_CTRL_R_OPTS="
     --preview 'echo {}'
     --preview-window 'down:3:hidden:wrap'

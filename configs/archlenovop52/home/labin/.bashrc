@@ -63,7 +63,7 @@ export LESS="-SRXF"
 
 # Environment variables
 export EDITOR=vim
-export TERM=alacritty-direct
+# export TERM=alacritty-direct
 export TERMINAL=alacritty
 
 # Prompt
