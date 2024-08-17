@@ -43,9 +43,7 @@ bind -m vi-insert -x '"\em": run-help' # Esc + m for manpage
 # Command not found, suggest package
 source /usr/share/doc/pkgfile/command-not-found.bash
 
-# Color man pages (with bat)
-export MANPAGER="sh -c 'col -bx | bat -l man -p'"
-export MANROFFOPT="-c"
+# Environment variables
 
 # History settings
 HISTFILE=~/.bash_history
@@ -59,12 +57,14 @@ PROMPT_EOL_MARK=''                                      # Removes the trailing %
 export SUDO_PROMPT=$'\e[38;2;207;34;46mPassword:\e[0m ' # Make the sudo prompt simpler and colorful
 
 # Config for less
-export LESS="-SRXF"
+export LESS="-S -R -F --incsearch --mouse"
 
-# Environment variables
+# Color man pages (with bat)
+export MANPAGER="sh -c 'col -bx | bat -l man -p'"
+export MANROFFOPT="-c"
+
+# EDITOR
 export EDITOR=vim
-# export TERM=alacritty-direct
-export TERMINAL=alacritty
 
 # Prompt
 eval "$(starship init bash)"
