@@ -8,32 +8,33 @@ opacity = 1
 padding = { x = 5, y = 5 }
 dynamic_padding = true
 
-# (Github Light) Colors for Alacritty
+# (Github Light) Colors for Alacritty # HEX to 8-bit Mappings:
+
 [colors]
-primary = { background = "#ffffff", foreground = "#1f2328" }
+primary = { background = "#ffffff", foreground = "#1f2328" } # Background (#ffffff) → Closest 8-bit: 255 (White) # Foreground (#1f2328) → Closest 8-bit: 235 (Very dark gray)
 
 [colors.cursor]
-cursor = "#1f2328"
-text = "#ffffff"
+cursor = "#1f2328" # Cursor (#1f2328) → Closest 8-bit: 235
+text   = "#ffffff"   # Text (#ffffff) → Closest 8-bit: 255
 
 # Normal colors
 [colors.normal]
-black = '#24292f'
-red = '#cf222e'
-green = '#116329'
-yellow = '#4d2d00'
-blue = '#0969da'
-magenta = '#8250df'
-cyan = '#1b7c83'
-white = '#6e7781'
+black   = '#24292f'   # Black (#24292f) → Closest 8-bit: 236 (Very dark gray)
+red     = '#cf222e'     # Red (#cf222e) → Closest 8-bit: 160 (Bright red)
+green   = '#116329'   # Green (#116329) → Closest 8-bit: 28 (Green)
+yellow  = '#4d2d00'  # Yellow (#4d2d00) → Closest 8-bit: 130 (Brownish yellow)
+blue    = '#0969da'    # Blue (#0969da) → Closest 8-bit: 32 (Bright blue)
+magenta = '#8250df' # Magenta (#8250df) → Closest 8-bit: 99 (Bright purple)
+cyan    = '#1b7c83'    # Cyan (#1b7c83) → Closest 8-bit: 30 (Dark cyan)
+white   = '#6e7781'   # White (#6e7781) → Closest 8-bit: 245 (Light gray)
 
 # Bright colors
 [colors.bright]
-black = '#57606a'
-red = '#a40e26'
-green = '#1a7f37'
-yellow = '#633c01'
-blue = '#218bff'
-magenta = '#8250df'
-cyan = '#1b7c83'
-white = '#6e7781'
+black   = '#57606a'   # Bright Black (#57606a) → Closest 8-bit: 242 (Medium gray)
+red     = '#a40e26'     # Bright Red (#a40e26) → Closest 8-bit: 124 (Dark red)
+green   = '#1a7f37'   # Bright Green (#1a7f37) → Closest 8-bit: 29 (Bright green)
+yellow  = '#633c01'  # Bright Yellow (#633c01) → Closest 8-bit: 136 (Yellow-brown)
+blue    = '#218bff'    # Bright Blue (#218bff) → Closest 8-bit: 33 (Bright blue)
+magenta = '#8250df' # Bright Magenta (#8250df) → Closest 8-bit: 99 (Bright purple)
+cyan    = '#1b7c83'    # Bright Cyan (#1b7c83) → Closest 8-bit: 30 (Dark cyan)
+white   = '#6e7781'   # Bright White (#6e7781) → Closest 8-bit: 245 (Light gray)

@@ -57,11 +57,11 @@ PROMPT_EOL_MARK=''                                      # Removes the trailing %
 export SUDO_PROMPT=$'\e[38;2;207;34;46mPassword:\e[0m ' # Make the sudo prompt simpler and colorful
 
 # Config for less
-export LESS="-S -R -F --incsearch --mouse"
+export LESS="-S -R -F --incsearch --mouse --use-color -Dd+30 -Du+32 -Ds+99"
 
-# Color man pages (with bat)
-export MANPAGER="sh -c 'col -bx | bat -l man -p'"
-export MANROFFOPT="-c"
+# Color man pages (with less)
+export MANPAGER="less -DE255.160 -DP29 -DS160.255"
+export MANROFFOPT="-P -c"
 
 # EDITOR
 export EDITOR=vim
@@ -71,7 +71,7 @@ eval "$(starship init bash)"
 
 # Binds
 bind -x '"\ep": fzpm'  # Esc + p for fzpm
-bind -x '"\et": fztmx' # Esc + t for fztmx
+bind -x '"\es": fztmx' # Esc + s for fztmx(sessions)
 bind -x '"\ef": vifm'  # Esc + f for vifm
 
 fastfetch
