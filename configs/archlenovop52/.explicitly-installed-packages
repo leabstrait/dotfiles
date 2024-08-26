@@ -8,6 +8,7 @@ bluedevil
 cloudflare-warp-bin
 dolphin
 efibootmgr
+emacs
 eza
 fastfetch
 fzf
@@ -48,11 +49,8 @@ starship
 strace
 tmux
 tmux-bash-completion-git
-tmux-mem-cpu-load
 ttf-ibm-plex
 ttf-ibmplex-mono-nerd
-vifm
-vim
 virtualbox
 virtualbox-host-modules-arch
 visual-studio-code-bin

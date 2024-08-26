@@ -198,5 +198,6 @@
     },
     "terminal.integrated.sendKeybindingsToShell": true,
     "terminal.integrated.allowChords": false,
-    "terminal.integrated.minimumContrastRatio": 1
+    "terminal.integrated.minimumContrastRatio": 1,
+    "terminal.integrated.rightClickBehavior": "nothing"
 }

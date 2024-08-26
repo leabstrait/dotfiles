@@ -12,18 +12,21 @@ _success() {
     echo "$(date) SUCCESS:  $@" >>$DOTFILES_INSTALL_LOG
     local message=$1
     printf "%s✓ Success:%s\n" "$(tput setaf 2)" "$(tput sgr0) $message"$'\n'
+    return 0
 }
 
 _warning() {
     echo "$(date) WARNING:  $@" >>$DOTFILES_INSTALL_LOG
     local message=$1
     printf "%s! Warning:%s\n" "$(tput setaf 3)" "$(tput sgr0) $message"
+    return 0
 }
 
 _failure() {
     echo "$(date) FAILURE:  $@" >>$DOTFILES_INSTALL_LOG
     local message=$1
     printf "%s✗ Failure:%s\n" "$(tput setaf 1)" "$(tput sgr0) $message"$'\n'
+    return 1
 }
 
 # Config functions
@@ -39,7 +42,7 @@ clone_dotfiles() {
             _success "${DOTFILES_DIR} created, repository cloned"
 
             # Change to the dotfiles directory
-            cd "${DOTFILES_DIR}"
+            cd "${DOTFILES_DIR}" || return 1
 
             # Change the remote URL to use SSH
             _process "→ Changing remote URL to SSH"
@@ -47,14 +50,18 @@ clone_dotfiles() {
 
             if [[ $? -eq 0 ]]; then
                 _success "Remote URL changed to SSH"
+                return 0
             else
                 _failure "Failed to change remote URL to SSH"
+                return 1
             fi
         else
             _failure "Failed to clone repository"
+            return 1
         fi
     else
         _process "${DOTFILES_DIR} already exists"
+        return 0
     fi
 }
 
@@ -63,41 +70,42 @@ link_dotfiles() {
     if [[ -d $CONFIG_ROOT ]]; then
         _process "→ Symlinking dotfiles in $CONFIG_ROOT\n"
 
-        find $CONFIG_ROOT -type f -not -name "*.bak" | while read config_file; do
+        find $CONFIG_ROOT -type f -not -name "*.bak" | while read -r config_file; do
             _process "→ Linking ${config_file}"
             filename=${config_file#"$CONFIG_ROOT"}
+
             if [[ -f $filename ]]; then
                 echo "File $filename already exists!"
                 echo "Do you want to show the diff between the dotfile and the original file? (y/n)"
-                read REPLY </dev/tty
+                read -r REPLY </dev/tty
                 echo
+
                 if [[ $REPLY =~ ^[Yy]$ ]]; then
                     echo "diff:"
-                    if [ $filename = ${filename#"$HOME"} ]; then
+                    if [[ $filename = ${filename#"$HOME"} ]]; then
                         # echo  $filename $config_file | xargs code -dw -
                         echo $filename $config_file | xargs sudo $DIFFTOOL
                         echo "Do you want to overwrite the original file with the tracked file? (y/n)"
-                        read REPLY </dev/tty
+                        read -r REPLY </dev/tty
                         if [[ $REPLY =~ ^[Yy]$ ]]; then
                             sudo ln -sfv $config_file $filename
                         fi
-                        echo
                     else
                         # echo $filename $config_file |xargs  code -dw -
                         echo $filename $config_file | xargs $DIFFTOOL
                         echo "Do you want to overwrite the original file with the tracked file? (y/n)"
-                        read REPLY </dev/tty
+                        read -r REPLY </dev/tty
                         if [[ $REPLY =~ ^[Yy]$ ]]; then
                             ln -sfv $config_file $filename
                         fi
-                        echo
                     fi
                 else
                     continue
                 fi
             fi
+
             if [[ ! -L "$filename" ]]; then
-                if [ $filename = ${filename#"$HOME"} ]; then
+                if [[ $filename = ${filename#"$HOME"} ]]; then
                     sudo mkdir -p "$(dirname "$filename")"
                     sudo ln -sv "$config_file" "$filename"
                 else
@@ -111,6 +119,10 @@ link_dotfiles() {
                 _failure "→ Not linked $config_file; link exists"
             fi
         done
+        return 0
+    else
+        _failure "Config root directory $CONFIG_ROOT does not exist"
+        return 1
     fi
 }
 
@@ -119,16 +131,15 @@ install_paru() {
     if [[ -z $(command -v paru) ]]; then
         _process "→ Installing paru"
         git clone https://aur.archlinux.org/paru-bin.git $HOME/paru
-        cd $HOME/paru
+        cd $HOME/paru || return 1
         makepkg -si
-        cd -
-        _success "→ paru installed"
-        _process "→ Updating paru"
-        paru -Syu
-        _success "→ paru updated"
-        _process "→ Cleaning up paru"
+        cd - || return 1
         rm -rf $HOME/paru
-        _success "→ paru cleaned up"
+        _success "→ paru installed"
+        return 0
+    else
+        _success "→ paru already installed"
+        return 0
     fi
 }
 
@@ -136,53 +147,61 @@ install_paru() {
 install_kompare() {
     if [[ -z $(command -v kompare) ]]; then
         _process "→ Installing kompare"
-        paru -S kompare
+        paru -S kompare || return 1
         _success "→ kompare installed"
+        return 0
+    else
+        _success "→ kompare already installed"
+        return 0
     fi
 }
 
 # Install packages from $CONFIG_ROOT/.explicitly-installed-packages
 install_packages() {
     _process "→ Installing packages with paru"
-    if [ -f $CONFIG_ROOT/.explicitly-installed-packages ]; then
-        paru -S --needed - <$CONFIG_ROOT/.explicitly-installed-packages
+    if [[ -f $CONFIG_ROOT/.explicitly-installed-packages ]]; then
+        paru -S --needed - <"$CONFIG_ROOT/.explicitly-installed-packages" || return 1
         _success "→ Packages installed"
+        return 0
+    else
+        _failure "→ Package list not found"
+        return 1
     fi
 }
 
 # Enable services from /.enabled-services-system and $HOME/.enabled-services-user
 enable_services() {
     _process "→ Enabling services"
-    if [ -f /.enabled-services-system ]; then
+    if [[ -f /.enabled-services-system ]]; then
         sudo systemctl enable $(</.enabled-services-system)
         _success "→ System services enabled"
         sleep 1
         sudo systemctl status --no-pager $(</.enabled-services-system)
-        _success "→ System services status"
-        sleep 1
     fi
-    if [ -f $HOME/.enabled-services-user ]; then
+
+    if [[ -f $HOME/.enabled-services-user ]]; then
         systemctl --user enable $(<$HOME/.enabled-services-user)
         _success "→ User services enabled"
         sleep 1
         systemctl --user status --no-pager $(<$HOME/.enabled-services-user)
-        _success "→ User services status"
-        sleep 1
     fi
+
+    return 0
 }
 
 join_groups() {
     _process "→ Joining groups"
-    if [ -f $HOME/.groups-user ]; then
-        sudo usermod -aG $(</.groups-user) $USER
+    if [[ -f $HOME/.groups-user ]]; then
+        sudo usermod -aG $(<$HOME/.groups-user) $USER || return 1
         _success "→ User groups joined"
         sleep 1
-        groups
+        groups || return 1
         _success "→ Current user groups"
         sleep 1
-        newgrp $(</.groups-user)
+        newgrp $(<$HOME/.groups-user)
         _success "→ New group added"
         sleep 1
+        return 0
     fi
 }
 
@@ -191,14 +210,18 @@ install() {
     # start with a clean logfile
     echo >"${DOTFILES_INSTALL_LOG}"
 
-    install_paru
-    install_kompare
+    install_paru || return 1
+    install_kompare || return 1
 
-    clone_dotfiles
+    clone_dotfiles || return 1
 
-    install_packages
-    link_dotfiles
-    enable_services
+    install_packages || return 1
+    link_dotfiles || return 1
+    enable_services || return 1
+
+    join_groups || return 1
+
+    return 0
 }
 
 ## Manage dotfiles with the dotfiles function
@@ -215,10 +238,10 @@ function dotfiles() {
     fi
 
     CONFIG_ROOT="$DOTFILES_DIR/configs/$(hostnamectl hostname)"
-    echo $CONFIG_ROOT
+    echo "$CONFIG_ROOT"
 
-    # check if the function is provided with arguments
-    if [ "$1" = "help" ]; then
+    # Check if the function is provided with arguments
+    if [[ "$1" == "help" ]]; then
         echo "Usage: dotfiles ( <command> <file> | <git commands> )"
         echo "<command>: track, untrack, listchanges"
         echo "<file>: the file to track or untrack"
@@ -227,31 +250,31 @@ function dotfiles() {
         echo "Example: dotfiles track .bashrc"
         echo "Example: dotfiles untrack .bashrc"
         echo "Example: dotfiles commit -m 'commit message'"
-        return
+        return 0
     fi
 
-    if [ "$1" = "install" ]; then
-        install
-        exit 0
+    if [[ "$1" == "install" ]]; then
+        install || return 1
+        return 0
     fi
 
     # check if the first argument is a valid command (track, untrack, listchanges) or a git command
-    if [ "$1" = "track" ] || [ "$1" = "untrack" ] || [ "$1" = "listchanges" ]; then
+    if [[ "$1" == "track" || "$1" == "untrack" || "$1" == "listchanges" ]]; then
         local command=$1
         echo "command: $command"
 
-        # resolve the file
-        if [ ! -z "$2" ]; then
-            if [ -f "$2" ]; then
+        # Resolve the file
+        if [[ -n "$2" ]]; then
+            if [[ -f "$2" ]]; then
                 local file=$(realpath "$2")
                 echo "file: $file"
             else
                 echo "File not found: $2"
-                return
+                return 1
             fi
         else
             echo "No file provided"
-            return
+            return 1
         fi
 
         if [ $command = "track" ]; then
@@ -268,14 +291,19 @@ function dotfiles() {
                     # cp $file $DOTFILES_DIR/CONFIG_ROOT$file.bak
                     ln -sfv $CONFIG_ROOT$file $file
                 fi
+                _success "File $file is now tracked in the dotfiles directory"
+                return 0
+                return 1
             else
                 echo "File $file is already tracked in the dotfiles directory"
+                return 1
+
             fi
         fi
 
         if [ $command = "untrack" ]; then
             local tracked_file_orig_path=${file#"$CONFIG_ROOT"}
-            if [ -L $tracked_file_orig_path ]; then
+            if [[ -L $tracked_file_orig_path ]]; then
                 # move the file from the dotfiles directory into the original
                 # directory preserving its path and name (if it exists)
                 # require sudo access if the file is not in the home directory
@@ -284,52 +312,59 @@ function dotfiles() {
                 else
                     mv $file $tracked_file_orig_path
                 fi
+                _success "File $file has been untracked and moved back to its original location"
+                return 0
             else
                 echo "File $file is not tracked yet or does not exist"
+                return 1
+
             fi
         fi
 
         if [ $command = "listchanges" ]; then
-            find $CONFIG_ROOT -type f | while read tracked_file; do
-                if [ -f $tracked_file ]; then
+            find "$CONFIG_ROOT" -type f | while read -r tracked_file; do
+                if [[ -f $tracked_file ]]; then
                     local tracked_file_orig_path=${tracked_file#"$CONFIG_ROOT"}
-                    if [ ! -L $tracked_file_orig_path ]; then
+                    if [[ ! -L $tracked_file_orig_path ]]; then
                         echo "tracked_file: $tracked_file"
                         echo "tracked_file_orig_path: $tracked_file_orig_path"
                         # ask the user if we should show diff between the tracked file and the original file
                         echo "Do you want to show the diff between the tracked file and the original file? (y/n)"
-                        read REPLY </dev/tty
-                        echo
+                        read -r REPLY </dev/tty
                         if [[ $REPLY =~ ^[Yy]$ ]]; then
                             echo "diff:"
-                            if [ $tracked_file_orig_path = ${tracked_file_orig_path#"$HOME"} ]; then
+                            if [[ $tracked_file_orig_path = ${tracked_file_orig_path#"$HOME"} ]]; then
                                 # echo  $tracked_file_orig_path $tracked_file | xargs code -dw -
                                 echo $tracked_file_orig_path $tracked_file | xargs sudo $DIFFTOOL
                                 echo "Do you want to overwrite the original file with the tracked file? (y/n)"
-                                read REPLY </dev/tty
+                                read -r REPLY </dev/tty
                                 if [[ $REPLY =~ ^[Yy]$ ]]; then
                                     sudo ln -sfv $tracked_file $tracked_file_orig_path
                                 fi
-                                echo
                             else
                                 # echo $tracked_file_orig_path $tracked_file |xargs  code -dw -
                                 echo $tracked_file_orig_path $tracked_file | xargs $DIFFTOOL
                                 echo "Do you want to overwrite the original file with the tracked file? (y/n)"
-                                read REPLY </dev/tty
+                                read -r REPLY </dev/tty
                                 if [[ $REPLY =~ ^[Yy]$ ]]; then
                                     ln -sfv $tracked_file $tracked_file_orig_path
                                 fi
-                                echo
                             fi
                         fi
                     fi
                 fi
             done
+            return 0
         fi
-
+        
     else
-        if [ -d "$DOTFILES_DIR/.git" ]; then
-            git --git-dir=$DOTFILES_DIR/.git --work-tree=$DOTFILES_DIR $@
+        # Execute git commands
+        if [[ -d "$DOTFILES_DIR/.git" ]]; then
+            git --git-dir="$DOTFILES_DIR/.git" --work-tree="$DOTFILES_DIR" "$@"
+            return $?
+        else
+            echo "Dotfiles directory does not contain a git repository"
+            return 1
         fi
     fi
 }
@@ -338,5 +373,5 @@ function dotfiles() {
 if [ $# -eq 0 ]; then
     dotfiles install
 else
-    dotfiles $@
+    dotfiles "$@"
 fi

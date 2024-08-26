@@ -1,0 +1,41 @@
+# fzf and paru
+fzpm() {
+    # Command to list all packages with colored tick mark
+    list_cmd="paru -Sl | awk '{print (\$4 == \"[installed]\" ? \"\\033[38;2;26;127;55m✔\\033[0m\" : \"▫\") \" \" \$2, \"(\"\$1\")\"}'"
+
+    # Command to preview package information
+    preview_cmd="pkg={2}; repo={3}; if paru -Qi \"\$pkg\" &>/dev/null; then paru -Qi \"\$pkg\" && paru -Ql \"\$pkg\" | awk '{print \$2}'; elif [[ \"\$repo\" != *\"aur\"* ]]; then paru -Si \"\$pkg\" && paru -Fl \"\$pkg\" | awk '{print \$2}'; else paru -Si \"\$pkg\"; fi"
+
+    # Command to remove marked packages
+    remove_cmd="tmux display-popup -E 'echo \"Removing: {+2}\" && read -p \"Press Enter to confirm or Ctrl-C to cancel...\"; if [ -n \"{+2}\" ]; then paru -Rcnsuv {+2}; fi'"
+
+    # Command to install marked packages
+    install_cmd="tmux display-popup -E 'echo \"Installing: {+2}\" && read -p \"Press Enter to confirm or Ctrl-C to cancel...\"; if [ -n \"{+2}\" ]; then paru -S {+2}; fi'"
+
+    # Bind keys to actions
+    bind_keys=(
+        "--bind=del:execute-silent($remove_cmd)"
+        "--bind=del:+reload($list_cmd)"
+        "--bind=del:+refresh-preview"
+        "--bind=enter:execute-silent($install_cmd)"
+        "--bind=enter:+reload($list_cmd)"
+        "--bind=enter:+refresh-preview"
+    )
+
+    # Execute fzf with the above components
+    eval "$list_cmd" | fzf \
+        --ansi \
+        --multi \
+        --delimiter " " --nth 2 \
+        --preview "$preview_cmd" \
+        --prompt "pkgs ▶ " \
+        "${bind_keys[@]}" \
+        --header "fuzzy package manager
+
+Enter: (re)install marked packages
+Del: remove marked packages
+
+"
+}
+
+fzpm

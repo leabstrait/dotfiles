@@ -1,7 +1,7 @@
 [Layout]
 DisplayNames=GB,NP
 LayoutList=gb,np
-Options=caps:escape_shifted_capslock
+Options=ctrl:nocaps
 ResetOldOptions=true
 Use=true
 VariantList=,

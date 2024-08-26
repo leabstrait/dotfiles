@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Get a list of groups the user is in and write to a file in the USER_HOME directory
 groups | tr ' ' '\n' >"$HOME/.groups-user"
