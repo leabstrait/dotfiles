@@ -1,5 +1,11 @@
 # fzf and paru
 fzpm() {
+    # Check if fzf and paru are installed
+    if ! command -v fzf &>/dev/null || ! command -v paru &>/dev/null; then
+        echo "Error: fzf and paru are not installed."
+        return 1
+    fi
+
     # Command to list all packages with colored tick mark
     list_cmd="paru -Sl | awk '{print (\$4 == \"[installed]\" ? \"\\033[38;2;26;127;55m✔\\033[0m\" : \"▫\") \" \" \$2, \"(\"\$1\")\"}'"
 

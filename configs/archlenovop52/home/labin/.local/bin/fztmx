@@ -1,5 +1,11 @@
 # fzf and tmux sessions
 fztmx() {
+    # Check if tmux and fzf are installed
+    if ! command -v tmux &> /dev/null || ! command -v fzf &> /dev/null; then
+        echo "Error: tmux and fzf are required for this script." >&2
+        return 1
+    fi
+
     # List all sessions except the current one
     list_cmd="tmux list-sessions"
 

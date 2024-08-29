@@ -42,12 +42,13 @@ for file in $HOME/.bashrc.d/*.bashrc; do
     [ -f "$file" ] && source "$file"
 done
 
-# tmux sessions using fzf
-bind -x '"\es": fztmx' # Esc + s for fuzzy tmux sessions
-
-# Automatically run fztmx if available and not in a tmux session or screen
-if command -v tmux &>/dev/null && command -v fztmx &>/dev/null && [ -n "$PS1" ] && [[ ! "$TERM" =~ screen ]] && [[ ! "$TERM" =~ tmux ]] && [ -z "$TMUX" ]; then
-    exec fztmx && exit
+# fzf tmux integration
+if command -v fztmx &>/dev/null; then
+    # tmux sessions using fzf
+    bind -x '"\es": fztmx' # Esc + s for fuzzy tmux sessions
+    if [ -z "$TMUX" ] && [ -n "$PS1" ] && [[ ! "$TERM" =~ screen ]] && [[ ! "$TERM" =~ tmux ]]; then
+        exec fztmx && exit
+    fi
 fi
 
 # System Information
