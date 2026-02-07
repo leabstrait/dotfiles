@@ -1,0 +1,230 @@
+{
+    "[bibtex]": {
+        "editor.defaultFormatter": "James-Yu.latex-workshop"
+    },
+    "[dockerfile]": {
+        "editor.defaultFormatter": "ms-azuretools.vscode-docker"
+    },
+    "[html]": {
+        "editor.defaultFormatter": "vscode.html-language-features"
+    },
+    "[javascript]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[javascriptreact]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[json]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[jsonc]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[latex]": {
+        "editor.defaultFormatter": "James-Yu.latex-workshop"
+    },
+    "[markdown]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[python]": {
+        "editor.defaultFormatter": "charliermarsh.ruff",
+        "editor.formatOnType": true,
+        "editor.codeActionsOnSave": {
+            "source.fixAll": "explicit",
+            "source.organizeImports": "explicit"
+        }
+    },
+    "[svelte]": {
+        "editor.defaultFormatter": "svelte.svelte-vscode"
+    },
+    "[typescript]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[vue]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[yaml]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "accessibility.signals.terminalBell": {
+        "sound": "on"
+    },
+    "alignment.surroundSpace": {
+        "arrow": [1, 1],
+        "assignment": [1, 1],
+        "colon": [0, 1],
+        "comment": 2
+    },
+    "cloudcode.autoDependencies": "off",
+    "colorize.languages": [
+        "css",
+        "sass",
+        "scss",
+        "less",
+        "postcss",
+        "sss",
+        "stylus",
+        "xml",
+        "svg"
+    ],
+    "cSpell.enabled": true,
+    "debug.console.fontFamily": "FiraMono Nerd Font Mono",
+    "diffEditor.ignoreTrimWhitespace": false,
+    "diffEditor.wordWrap": "off",
+    "editor.bracketPairColorization.independentColorPoolPerBracketType": true,
+    "editor.find.autoFindInSelection": "multiline",
+    "editor.fontFamily": "FiraMono Nerd Font Mono",
+    "editor.fontLigatures": true,
+    "editor.formatOnSaveMode": "modificationsIfAvailable",
+    "editor.guides.bracketPairs": false,
+    "editor.guides.indentation": false,
+    "editor.inlayHints.enabled": "off",
+    "editor.inlineSuggest.enabled": true,
+    "editor.inlineSuggest.showToolbar": "always",
+    "editor.language.brackets": [
+        ["{", "}"],
+        ["[", "]"],
+        ["(", ")"]
+    ],
+    "editor.linkedEditing": true,
+    "editor.renderControlCharacters": true,
+    "editor.renderLineHighlight": "all",
+    "editor.renderWhitespace": "all",
+    "editor.wordWrap": "off",
+    "files.associations": {
+        "*.j2": "jinja-html",
+        "*.djhtml": "jinja-html"
+    },
+    "files.autoSave": "afterDelay",
+    "files.defaultLanguage": "${activeEditorLanguage}",
+    "files.insertFinalNewline": true,
+    "files.trimFinalNewlines": true,
+    "files.trimTrailingWhitespace": true,
+    "git.autofetch": true,
+    "git.fetchOnPull": true,
+    "git.pruneOnFetch": true,
+    "git.untrackedChanges": "separate",
+    "github.copilot.enable": {
+        "*": false,
+        "plaintext": true,
+        "markdown": true,
+        "scminput": true,
+        "python": true,
+        "yaml": true
+    },
+    "githubPullRequests.queries": [
+        {
+            "label": "Local Pull Request Branches",
+            "query": "default"
+        },
+        {
+            "label": "Waiting For My Review",
+            "query": "repo:${owner}/${repository} is:open review-requested:${user}"
+        },
+        {
+            "label": "Assigned To Me",
+            "query": "repo:${owner}/${repository} is:open assignee:${user}"
+        },
+        {
+            "label": "Created By Me",
+            "query": "repo:${owner}/${repository} is:open author:${user}"
+        },
+        {
+            "label": "All Open",
+            "query": "default"
+        }
+    ],
+    "gitlens.codeLens.scopes": ["document", "containers", "blocks"],
+    "gitlens.views.commits.files.layout": "tree",
+    "gitlens.views.repositories.includeWorkingTree": true,
+    "grammarly.files.include": ["**/*.md", "**/*.txt", "**/*.tex"],
+    "javascript.suggest.paths": false,
+    "markdown.copyFiles.destination": {
+        "*": "${documentBaseName}/"
+    },
+    "markdown.editor.filePaste.copyIntoWorkspace": "mediaFiles",
+    "markdown.editor.pasteUrlAsFormattedLink.enabled": "smartWithSelection",
+    "material-icon-theme.folders.theme": "specific",
+    "notebook.cellToolbarLocation": {
+        "default": "right",
+        "jupyter-notebook": "right"
+    },
+    "notebook.lineNumbers": "on",
+    "prettier.tabWidth": 4,
+    "prettier.vueIndentScriptAndStyle": true,
+    "remote.tunnels.access.preventSleep": true,
+    "remote.tunnels.alwaysUpdateCLI": true,
+    "super-figure.bitmapFigureEditor": "/usr/bin/gimp",
+    "super-figure.vectorFigureEditor": "/usr/bin/inkscape",
+    "svelte.enable-ts-plugin": true,
+    "terminal.integrated.allowChords": false,
+    "terminal.integrated.copyOnSelection": true,
+    "terminal.integrated.cursorBlinking": true,
+    "terminal.integrated.defaultProfile.windows": "PowerShell",
+    "terminal.integrated.enablePersistentSessions": false,
+    "terminal.integrated.enableVisualBell": true,
+    "terminal.integrated.fontFamily": "FiraMono Nerd Font Mono",
+    "terminal.integrated.minimumContrastRatio": 1,
+    "terminal.integrated.rightClickBehavior": "nothing",
+    "terminal.integrated.sendKeybindingsToShell": true,
+    "terminal.integrated.tabs.enabled": true,
+    "typescript.suggest.paths": false,
+    "window.autoDetectColorScheme": true,
+    "window.customTitleBarVisibility": "auto",
+    "window.dialogStyle": "custom",
+    "window.zoomPerWindow": false,
+    "workbench.colorTheme": "GitHub Light",
+    "workbench.editor.highlightModifiedTabs": true,
+    "workbench.editorAssociations": {
+        "*.pdf": "latex-workshop-pdf-hook"
+    },
+    "workbench.iconTheme": "material-icon-theme",
+    "workbench.productIconTheme": "material-product-icons",
+    "workbench.tree.renderIndentGuides": "always",
+    "yaml.customTags": [
+        "!And",
+        "!And sequence",
+        "!If",
+        "!If sequence",
+        "!Not",
+        "!Not sequence",
+        "!Equals",
+        "!Equals sequence",
+        "!Or",
+        "!Or sequence",
+        "!FindInMap",
+        "!FindInMap sequence",
+        "!Base64",
+        "!Join",
+        "!Join sequence",
+        "!Cidr",
+        "!Ref",
+        "!Sub",
+        "!Sub sequence",
+        "!GetAtt",
+        "!GetAZs",
+        "!ImportValue",
+        "!ImportValue sequence",
+        "!Select",
+        "!Select sequence",
+        "!Split",
+        "!Split sequence"
+    ],
+    "workbench.sideBar.location": "right",
+    "github.copilot.nextEditSuggestions.enabled": true,
+    "gitlens.views.scm.grouped.views": {
+        "commits": true,
+        "branches": true,
+        "remotes": true,
+        "stashes": true,
+        "tags": true,
+        "worktrees": true,
+        "contributors": true,
+        "repositories": true,
+        "searchAndCompare": false,
+        "launchpad": false
+    },
+    "containers.containerClient": "com.microsoft.visualstudio.containers.docker",
+    "containers.orchestratorClient": "com.microsoft.visualstudio.orchestrators.dockercompose",
+    "git.blame.statusBarItem.enabled": true
+}

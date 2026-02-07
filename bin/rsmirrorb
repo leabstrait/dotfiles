@@ -1,0 +1,104 @@
+#!/usr/bin/env bash
+
+# rsmirrorb
+# rsync-based directory mirroring script
+# Mirror a source directory to multiple destinations, maintaining a .lastsync tree
+# snapshot for incremental updates.
+
+SOURCE="$1"
+shift
+DESTINATIONS=()
+DRYRUN=false
+
+# Parse arguments for destinations and optional --dry-run
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --dry-run) DRYRUN=true ;;
+        *) DESTINATIONS+=("$1") ;;
+    esac
+    shift
+done
+
+LASTSYNC=".lastsync"
+
+if [[ -z "$SOURCE" || "${#DESTINATIONS[@]}" -eq 0 ]]; then
+    echo "Usage: $0 /path/to/source dest1 [dest2 ...] [--dry-run]"
+    exit 1
+fi
+
+echo "Source: $SOURCE"
+echo "Destinations: ${DESTINATIONS[*]}"
+$DRYRUN && echo "Dry-run mode enabled"
+
+# -------------------------------
+# RSYNC OPTIONS
+# -------------------------------
+
+# Common options for both sync and refresh
+COMMON_OPTS=(
+    --archive        # recursive, preserve permissions, timestamps, symlinks, devices
+    --hard-links     # preserve hardlinks
+    --xattrs         # preserve extended attributes
+    --acls           # preserve ACLs
+    --sparse         # handle sparse files efficiently
+    --verbose        # verbose output
+    --stats             # show transfer summary
+    --human-readable # show sizes in human-readable format
+)
+
+# Options for syncing source -> destination
+SYNC_OPTS=(
+    "${COMMON_OPTS[@]}"
+    --progress          # show per-file progress
+    --delete-after      # remove files in destination after transfer
+    --no-inc-recursive  # incremental recursion off (hardlinks handled correctly)
+    --compress       # compress data during transfer (saves bandwidth)
+)
+
+# Options for refreshing .lastsync tree
+REFRESH_OPTS=(
+    "${COMMON_OPTS[@]}"
+    --delete           # remove files in checkpoint that no longer exist
+    # --link-dest added dynamically
+)
+
+# Add dry-run flag if requested
+$DRYRUN && SYNC_OPTS+=(--dry-run)
+$DRYRUN && REFRESH_OPTS+=(--dry-run)
+
+# -------------------------------
+# FUNCTIONS
+# -------------------------------
+
+# Refresh .lastsync tree using --link-dest of the source
+refresh_lastsync() {
+    local tree="$1" src="$2"
+    rsync "${REFRESH_OPTS[@]}" --link-dest="$(realpath "$src")" --exclude="$LASTSYNC" "$src/" "$tree/"
+    # exit
+}
+
+# Sync source to a destination
+sync_destination() {
+    local dest="$1"
+    echo "Syncing $SOURCE to $dest ..."
+    rsync "${SYNC_OPTS[@]}" "$SOURCE/" "$dest/"
+}
+
+# -------------------------------
+# MAIN SCRIPT
+# -------------------------------
+
+# 1️⃣ Sync source to all destinationsx
+for D in "${DESTINATIONS[@]}"; do
+    sync_destination "$D"
+done
+
+# 2️⃣ Refresh source .lastsync tree
+refresh_lastsync "$SOURCE$LASTSYNC" "$SOURCE"
+
+# 3️⃣ Refresh .lastsync tree on each destination
+for D in "${DESTINATIONS[@]}"; do
+    refresh_lastsync "$D$LASTSYNC" "$D"
+done
+
+echo "Sync complete. $LASTSYNC updated for next run."

@@ -1,0 +1,29 @@
+$include /etc/inputrc
+
+# Bell style: none, visible, or audible
+set bell-style audible
+
+# Keybindings for navigation
+"\e[1;5D": backward-word    # Ctrl + Left: Back one word
+"\e[1;5C": forward-word     # Ctrl + Right: Forward one word
+"\e[A": history-search-backward  # Up Arrow: Backward history search
+"\e[B": history-search-forward   # Down Arrow: Forward history search
+
+# Tab completion settings
+TAB: menu-complete                  # Tab: Cycle forward
+"\e[Z": menu-complete-backward      # Shift + Tab: Cycle backward
+set show-all-if-ambiguous on        # Show all matches if ambiguous
+set menu-complete-display-prefix on # Highlight common prefix
+
+# Colors and file type markers
+set colored-completion-prefix on   # Color common prefix
+set visible-stats On               # Mark file types
+set colored-stats On               # Color files by type
+set mark-symlinked-directories On  # Mark symlinked dirs
+
+# Advanced interaction settings
+set enable-bracketed-paste on      # Prevent auto-execution on paste
+set echo-control-characters on     # Show control characters
+
+# Miscellaneous enhancements
+set expand-tilde on                # Expand tilde to home dir
