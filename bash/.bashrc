@@ -61,6 +61,8 @@ export LESS="-S -R -F --incsearch --mouse --use-color -Dd+30 -Du+33 -Ds+99 -DP25
 export MANPAGER="less"
 export MANROFFOPT="-P -c"
 
+# EDITOR variable
+export EDITOR="code --wait"
 
 # Function to run help or man page
 function run-help() {
