@@ -3,9 +3,9 @@ set -euo pipefail
 
 ACTION="${1:-install}"
 
-REPO_URL="https://github.com/leabstrait/dotfiles.git"
-DOTFILES_DIR="$HOME/dotfiles"
-BACKUP_ROOT="$HOME/dotfiles_backup"
+REPO_URL="git@github.com:leabstrait/dotfiles.git"
+DOTFILES_DIR="$HOME/ws/i/dotfiles"
+BACKUP_ROOT="$HOME/ws/i/dotfiles_backup"
 TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
 BACKUP_DIR="$BACKUP_ROOT/$TIMESTAMP"
 
@@ -68,6 +68,7 @@ clone_repo() {
     log "Dotfiles repo already exists, pulling latest changes"
     git -C "$DOTFILES_DIR" pull
   else
+    mkdir -p $DOTFILES_DIR
     log "Cloning dotfiles repo"
     git clone "$REPO_URL" "$DOTFILES_DIR"
   fi
