@@ -135,4 +135,8 @@ VSCODE_USER_DIR="$HOME/.config/Code/User"
 backup_and_link "$DOTFILES_DIR/vscode/settings.json" "$VSCODE_USER_DIR/settings.json"
 backup_and_link "$DOTFILES_DIR/vscode/keybindings.json" "$VSCODE_USER_DIR/keybindings.json"
 
+# KDE Plasma
+backup_and_link "$DOTFILES_DIR/kde/kglobalshortcutsrc" "$HOME/.config/kglobalshortcutsrc"
+
+
 log "✅ Dotfiles installed successfully"
