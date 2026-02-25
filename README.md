@@ -1,6 +1,9 @@
 # dotfiles
 
-`curl -fsSL https://raw.githubusercontent.com/leabstrait/dotfiles/main/bin/dotfiles-setup | bash`
+## Instructions
+
+- Ensure ssh authentication is set up.
+- Download `dotfiles-setup` script from `bin` directory and run it.
 
 ## Disclaimer
 
