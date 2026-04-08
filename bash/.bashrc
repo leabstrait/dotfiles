@@ -98,7 +98,7 @@ eval "$(direnv hook bash)"
 # Package manager
 
 # alias to generate and save mirrorlist for pacman
-alias pmrefresh='sudo reflector --country NP,CN --age 24 --protocol https --sort rate --save /etc/pacman.d/mirrorlist'
+alias pmrefresh='sudo reflector --country AU,DE --age 24 --protocol https --sort rate --save /etc/pacman.d/mirrorlist'
 
 # Command not found, suggest package
 source /usr/share/doc/pkgfile/command-not-found.bash
