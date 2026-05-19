@@ -1,0 +1,277 @@
+#+TITLE: Arch Linux System Setup - home-laptop
+#+PROPERTY: header-args:shell :results output :exports both
+
+* Overview & Prerequisites
+This literate configuration outlines the post-installation setup for =home-laptop=. It assumes a baseline Arch Linux installation via =archinstall=, with Emacs installed and operational at first boot.
+
+* System & Core Utilities
+
+** Base Development & Git
+We need essential compilation tools and Git before we can build anything from the AUR or manage dotfiles.
+
+#+BEGIN_SRC shell :dir /sudo::
+  echo "=== Installing Base Development Tools & Git ==="
+  pacman -Syu --needed --noconfirm base-devel git
+#+END_SRC
+
+** AUR Helper Installation (yay)
+This block clones, builds, and installs =yay-bin= from the AUR, and then meticulously cleans up the build directory afterward. It runs as a normal user.
+
+#+BEGIN_SRC shell
+  echo "=== Installing yay-bin ==="
+  cd /tmp
+  git clone https://aur.archlinux.org/yay-bin.git
+  cd yay-bin
+  makepkg -si --noconfirm
+  
+  echo "=== Cleaning up build directory ==="
+  cd /tmp
+  rm -rf yay-bin
+#+END_SRC
+
+** Pkgfile Setup
+=pkgfile= is a tool that links files to the packages that provide them. We install it and enable its automatic daily update timer.
+
+#+BEGIN_SRC shell :dir /sudo::
+  echo "=== Setting up pkgfile and enabling update timer ==="
+  pacman -S --needed --noconfirm pkgfile
+  pkgfile -u
+  systemctl enable --now pkgfile-update.timer
+#+END_SRC
+
+* Storage, Virtual Memory & Performance
+
+** Second SSD Swap Setup
+This step dedicates the **entirety** of your secondary SSD to system Swap space.
+/CRITICAL WARNING: Ensure /dev/sdb is the correct drive before executing this block./
+
+#+BEGIN_SRC shell :dir /sudo::
+  echo "=== Configuring Swap on Secondary SSD ==="
+  # Replace /dev/sdb with your actual second SSD identifier if different
+  TARGET_DISK="/dev/sdb"
+
+  # Wipe existing signatures and create a single swap partition
+  wipefs -a "$TARGET_DISK"
+  (
+    echo o   # Create a new empty DOS partition table
+    echo n   # Add a new partition
+    echo p   # Primary partition
+    echo 1   # Partition number 1
+    echo     # First sector (Accept default)
+    echo     # Last sector (Accept default to take full disk)
+    echo t   # Change partition type
+    echo 82  # Linux Swap type
+    echo w   # Write changes
+  ) | fdisk "$TARGET_DISK"
+
+  # Format and activate the swap partition
+  mkswap "${TARGET_DISK}1"
+  swapon "${TARGET_DISK}1"
+
+  # Persist across reboots via /etc/fstab if not already present
+  UUID_SWAP=$(blkid -s UUID -o value "${TARGET_DISK}1")
+  if ! grep -q "$UUID_SWAP" /etc/fstab; then
+      echo "UUID=$UUID_SWAP none swap defaults 0 0" >> /etc/fstab
+      echo "Swap added to /etc/fstab successfully."
+  fi
+#+END_SRC
+
+** Kernel Virtual Memory Adjustments (Swappiness)
+To optimize performance and protect your SSDs, we lower the `vm.swappiness` value to 10 (making the system favor RAM over swap space) and make it permanent.
+
+#+BEGIN_SRC shell :dir /sudo::
+  echo "=== Setting VM Swappiness to 10 ==="
+  # Set it for the active session
+  sysctl vm.swappiness=10
+
+  # Make it permanent
+  CONF_FILE="/etc/sysctl.d/99-swappiness.conf"
+  echo "vm.swappiness=10" > "$CONF_FILE"
+  echo "Persistent configuration written to $CONF_FILE"
+#+END_SRC
+
+* Desktop Environment (KDE Plasma)
+
+** Core Desktop Meta-packages & Display Manager
+Installs the full suite of KDE desktop environment utilities, networks management applets, audio controllers, power governors, and the SDDM login manager.
+
+#+BEGIN_SRC shell :dir /sudo::
+  echo "=== Installing Plasma Desktop Components ==="
+  pacman -S --needed --noconfirm \
+    plasma-desktop \
+    plasma-pa \
+    networkmanager \
+    powerdevil \
+    bluedevil \
+    sddm \
+    konsole \
+    dolphin \
+    plasma-systemmonitor
+
+  echo "=== Enabling NetworkManager and SDDM Login Manager ==="
+  systemctl enable sddm.service
+  systemctl enable NetworkManager.service
+#+END_SRC
+
+** KWallet & Security Configuration
+Ensures seamless integration of the KDE Wallet with your PAM system login, meaning it unlocks automatically when you log into your desktop.
+
+#+BEGIN_SRC shell :dir /sudo::
+  echo "=== Installing KWallet Framework ==="
+  pacman -S --needed --noconfirm kwalletmanager signon-kwallet-extension
+
+  echo "=== Ensuring PAM integration configuration exists ==="
+  # Typically handled automatically on Arch, but verifying entry in system-local-login
+  if ! grep -q "pam_kwallet5.so" /etc/pam.d/system-local-login; then
+      echo "Note: Ensure pam_kwallet5.so is initialized in your display manager config (/etc/pam.d/sddm)"
+  fi
+#+END_SRC
+
+** Visual Polish, Fonts & Layout Configuration (UI Instructions)
+Many Plasma modifications are heavily tied to runtime state or individual config fragments. Perform these manual configurations inside the Plasma Control Panel:
+
+*** Virtual Desktops & Pager Setup
+1. Open **System Settings** -> **Window Management** -> **Virtual Desktops**.
+2. Configure exactly **8 workspaces**.
+3. Enable **Navigation wraps around**.
+4. Set the switching animation to **Fade**.
+5. Ensure **Show desktop layout indicators** is disabled.
+
+*** Taskbar & Bottom Panel Architecture
+1. Right-click the bottom panel and select **Enter Edit Mode**.
+2. Reduce the panel height to a compact, small, yet crisp and legible dimension.
+3. Organize the panel elements from **Left to Right** as follows:
+   * **Application Launcher / Menu**
+   * **Virtual Desktop Pager**
+   * **Spacer** (Configured to push remaining items out)
+   * **Task Manager (Window List)**: Right-click -> Configure -> Set *Open on hover*, restrict filters to *Show current screen only*, and restrict to *Current Desktop only*.
+   * **System Tray** (Standard items)
+   * **User Switcher**
+   * **Peek at Desktop** button (on the extreme right edge).
+
+*** Advanced Window Decoration Customization
+1. Open **System Settings** -> **Appearance** -> **Window Decorations** -> **Titlebar Buttons**.
+2. Drag and drop the window icons into this exact sequence:
+   * **Left Side:** [Application Menu] -> [Pin to Workspace] -> [Keep Above/Always on Top] -> [Hide from Screen Share].
+   * **Right Side:** [Minimize] -> [Maximize] -> [Close].
+3. Under the **Themes** tab, pick a decoration scheme (like Breeze) that highlights the active window borders with a high-contrast accent color to easily separate it from background apps.
+
+*** Night Light, Automated Themes & Localization
+1. Open **System Settings** -> **Appearance** -> **Global Theme**. 
+2. Configure **KDE Sunset/Sunrise scheduling** by plugging in your manual latitude/longitude coordinates.
+3. Open **System Settings** -> **Display and Monitor** -> **Night Light**, and synchronize it to match the manual solar schedule.
+4. Navigate to **System Settings** -> **Input Devices** -> **Keyboard**.
+   * Add a secondary keyboard layout of your choice.
+   * Under the **Advanced** tab, find the *Caps Lock behavior* dropdown and check **Map Caps Lock to an additional Control key**.
+
+*** Konsole Profiles
+1. Open **Konsole**. Go to **Settings** -> **Manage Profiles**.
+2. Create a profile named =Light= using a high-contrast day theme (e.g., Breeze Light).
+3. Create a profile named =Dark= using your preferred nighttime theme (e.g., Breeze Dark).
+
+* Fonts & Shell Environment
+
+** Typography Stack
+Installs a highly comprehensive array of fonts encompassing CJK scripts, system-wide emojis, custom web formatting, and terminal Nerd Fonts.
+
+#+BEGIN_SRC shell :dir /sudo::
+  echo "=== Installing Complete Font Stack ==="
+  pacman -S --needed --noconfirm \
+    noto-fonts \
+    noto-fonts-cjk \
+    noto-fonts-emoji \
+    noto-fonts-extra \
+    ttf-font-awesome
+    
+  echo "=== Installing Nerd Fonts for Shell Icons ==="
+  # Using yay for the complete Nerd Fonts collection or specific subset
+  yay -S --needed --noconfirm ttf-nerd-fonts-symbols-common
+#+END_SRC
+
+** Modern CLI Tools & Runtimes
+Installs your core developer terminal environment dependencies.
+
+#+BEGIN_SRC shell
+  echo "=== Installing Shell Enhancements ==="
+  yay -S --needed --noconfirm starship nvm eza bat
+#+END_SRC
+
+* Local AI & LLM Environment
+
+** llama.cpp & Personal AI Agent Setup
+This section automates setting up your localized LLM execution model environment via =llama.cpp= and initializes a background workspace agent.
+
+#+BEGIN_SRC shell
+  echo "=== Installing llama.cpp ==="
+  yay -S --needed --noconfirm llama.cpp
+
+  echo "=== Downloading Baseline Model ==="
+  # Set up a clean local models directory
+  mkdir -p ~/ai/models
+  
+  # Downloads a highly capable, lightweight 3B model (e.g., Llama-3-8B-Instruct GGUF Q4)
+  if [ ! -f ~/ai/models/llama-3-8b-instruct.Q4_K_M.gguf ]; then
+      curl -L "https://huggingface.co/lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF/resolve/main/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf" \
+        -o ~/ai/models/llama-3-8b-instruct.Q4_K_M.gguf
+  fi
+
+  echo "=== Initializing Personal Pi Agent Configuration ==="
+  # Example scaffolding script to initiate the local server agent
+  cat << 'EOF' > ~/ai/start-pi-agent.sh
+  #!/bin/bash
+  echo "Starting Pi Agent on localhost:8080..."
+  llama-server \
+    --model ~/ai/models/llama-3-8b-instruct.Q4_K_M.gguf \
+    --ctx-size 4096 \
+    --port 8080
+  EOF
+  chmod +x ~/ai/start-pi-agent.sh
+#+END_SRC
+
+* Authentication, Provisioning & Execution
+
+** SSH Key Generation & Deployment Configuration
+Generates a highly secure Ed25519 cryptographic key signature for host identification and displays it right below so you can link it with upstream code providers.
+
+#+BEGIN_SRC shell
+  echo "=== Generating SSH Deployment Keys ==="
+  # Only creates a key if one does not already exist
+  if [ ! -f ~/.ssh/id_ed25519 ]; then
+      ssh-keygen -t ed25519 -C "home-laptop" -N "" -f ~/.ssh/id_ed25519
+  fi
+
+  echo -e "\n=== YOUR PUBLIC KEY (COPY BELOW) ==="
+  cat ~/.ssh/id_ed25519.pub
+  echo -e "====================================\n"
+#+END_SRC
+
+*** External Platform Settings Link Reference
+Copy the terminal output block string displayed above and navigate to these addresses to authorize this notebook:
+* **GitHub SSH Configuration Key Management:** [[https://github.com/settings/keys]]
+* **GitLab SSH Configuration Key Management:** [[https://gitlab.com/-/profile/keys]]
+
+** Workspace Initialization Script Execution
+Runs your pre-existing workspace pipeline provisioning file.
+
+#+BEGIN_SRC shell
+  echo "=== Launching Pre-existing Workspace Customization Script ==="
+  if [ -f ~/bin/create_ws ] || [ -f ~/.config/dotfiles/scripts/create_ws ]; then
+      # Update path matching your real location
+      sh -c "~/bin/create_ws"
+  else
+      echo "Warning: create_ws script could not be located in standard executable paths."
+  fi
+#+END_SRC
+
+** Dotfiles Activation Script Execution
+Triggers your foundational mapping, symbolic link associations, and configuration layout attachments.
+
+#+BEGIN_SRC shell
+  echo "=== Launching Pre-existing Dotfiles Setup Script ==="
+  if [ -f ./dotfiles-setup ] || [ -f ../dotfiles-setup ]; then
+      # Adjust context depending on working directory
+      ./dotfiles-setup
+  else
+      echo "Warning: dotfiles-setup deployment script not found. Run it manually from root folder."
+  fi
+#+END_SRC
