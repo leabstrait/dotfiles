@@ -1,0 +1,42 @@
+#+TITLE: System Setup for Desktop-Home
+#+PROPERTY: header-args:shell :results output :exports both
+
+* System Overview
+This file manages the system-level configuration, package installation, and setup commands for my main home desktop.
+
+* Package Management
+To install or update the core packages for this system, place your cursor inside the block below and press =C-c C-c=.
+
+** System Packages (Arch/Pacman Example)
+#+BEGIN_SRC shell :dir /sudo::
+  echo "Updating system repositories..."
+  pacman -Syu --noconfirm
+
+  echo "Installing required applications..."
+  pacman -S --needed --noconfirm \
+    ripgrep \
+    fd \
+    git \
+#+END_SRC
+
+** User-space Packages
+No sudo required for these, so we don't pass the sudo argument.
+#+BEGIN_SRC shell
+  echo "Installing user applications..."
+  pacman -S firefox
+#+END_SRC
+
+* System Configurations & Commands
+Commands required to tweak the system environment.
+
+** Enable Systemd Services
+#+BEGIN_SRC shell :dir /sudo::
+  echo "Enabling Bluetooth service..."
+  systemctl enable --now bluetooth
+#+END_SRC
+
+** Custom Adjustments
+#+BEGIN_SRC shell
+  # Set local timezone
+  timedatectl set-timezone "Nepal/Kathmandu"
+#+END_SRC
