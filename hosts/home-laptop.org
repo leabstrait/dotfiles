@@ -7,7 +7,7 @@ This literate configuration outlines the post-installation setup for =home-lapto
 * System & Core Utilities
 
 ** Base Development & Git
-We need essential compilation tools and Git before we can build anything from the AUR or manage dotfiles.
+We need essential compilation tools and Git before we can build anything from the AUR or manage configs.
 
 #+BEGIN_SRC shell :dir /sudo::
   echo "=== Installing Base Development Tools & Git ==="
@@ -23,7 +23,7 @@ This block clones, builds, and installs =yay-bin= from the AUR, and then meticul
   git clone https://aur.archlinux.org/yay-bin.git
   cd yay-bin
   makepkg -si --noconfirm
-  
+
   echo "=== Cleaning up build directory ==="
   cd /tmp
   rm -rf yay-bin
@@ -157,7 +157,7 @@ Many Plasma modifications are heavily tied to runtime state or individual config
 3. Under the **Themes** tab, pick a decoration scheme (like Breeze) that highlights the active window borders with a high-contrast accent color to easily separate it from background apps.
 
 *** Night Light, Automated Themes & Localization
-1. Open **System Settings** -> **Appearance** -> **Global Theme**. 
+1. Open **System Settings** -> **Appearance** -> **Global Theme**.
 2. Configure **KDE Sunset/Sunrise scheduling** by plugging in your manual latitude/longitude coordinates.
 3. Open **System Settings** -> **Display and Monitor** -> **Night Light**, and synchronize it to match the manual solar schedule.
 4. Navigate to **System Settings** -> **Input Devices** -> **Keyboard**.
@@ -182,7 +182,7 @@ Installs a highly comprehensive array of fonts encompassing CJK scripts, system-
     noto-fonts-emoji \
     noto-fonts-extra \
     ttf-font-awesome
-    
+
   echo "=== Installing Nerd Fonts for Shell Icons ==="
   # Using yay for the complete Nerd Fonts collection or specific subset
   yay -S --needed --noconfirm ttf-nerd-fonts-symbols-common
@@ -208,7 +208,7 @@ This section automates setting up your localized LLM execution model environment
   echo "=== Downloading Baseline Model ==="
   # Set up a clean local models directory
   mkdir -p ~/ai/models
-  
+
   # Downloads a highly capable, lightweight 3B model (e.g., Llama-3-8B-Instruct GGUF Q4)
   if [ ! -f ~/ai/models/llama-3-8b-instruct.Q4_K_M.gguf ]; then
       curl -L "https://huggingface.co/lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF/resolve/main/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf" \
@@ -227,6 +227,14 @@ This section automates setting up your localized LLM execution model environment
   EOF
   chmod +x ~/ai/start-pi-agent.sh
 #+END_SRC
+
+gitlab
+
+yay gitlab
+
+then
+
+gitlab completion
 
 * Authentication, Provisioning & Execution
 
@@ -255,7 +263,7 @@ Runs your pre-existing workspace pipeline provisioning file.
 
 #+BEGIN_SRC shell
   echo "=== Launching Pre-existing Workspace Customization Script ==="
-  if [ -f ~/bin/create_ws ] || [ -f ~/.config/dotfiles/scripts/create_ws ]; then
+  if [ -f ~/bin/create_ws ] || [ -f ~/.config/configs/scripts/create_ws ]; then
       # Update path matching your real location
       sh -c "~/bin/create_ws"
   else
@@ -263,15 +271,15 @@ Runs your pre-existing workspace pipeline provisioning file.
   fi
 #+END_SRC
 
-** Dotfiles Activation Script Execution
+** configs Activation Script Execution
 Triggers your foundational mapping, symbolic link associations, and configuration layout attachments.
 
 #+BEGIN_SRC shell
-  echo "=== Launching Pre-existing Dotfiles Setup Script ==="
-  if [ -f ./dotfiles-setup ] || [ -f ../dotfiles-setup ]; then
+  echo "=== Launching Pre-existing configs Setup Script ==="
+  if [ -f ./configs-setup ] || [ -f ../configs-setup ]; then
       # Adjust context depending on working directory
-      ./dotfiles-setup
+      ./configs-setup
   else
-      echo "Warning: dotfiles-setup deployment script not found. Run it manually from root folder."
+      echo "Warning: configs-setup deployment script not found. Run it manually from root folder."
   fi
 #+END_SRC

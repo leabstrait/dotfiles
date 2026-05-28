@@ -1,0 +1,29 @@
+-- 1. General Settings
+-- Don't show the "Help" message at startup
+\set QUIET 1
+
+-- 2. Formatting & Display
+-- Auto-enable vertical expanded mode for wide tables
+--\x auto
+-- Show how long each query takes to run
+\timing on
+-- Use a friendly string for NULL values
+\pset null '[null]'
+
+-- 3. Custom Prompts
+-- Format: [user]@[host]:[database] [status] >
+-- %n=user, %M=host, %/=db, %R=status, %#=privilege
+\set PROMPT1 '%[%033[1m%]%n@%M:%/%R%~%x%[%033[0m%]%# '
+-- Minimal prompt for multi-line queries
+\set PROMPT2 '[more] %R > '
+
+-- 4. Custom Aliases (Shorthand)
+-- Usage: Type :uptime inside psql to run the query
+\set uptime 'SELECT now() - pg_postmaster_start_time() AS uptime;'
+\set table_sizes 'SELECT relname, pg_size_pretty(pg_total_relation_size(oid)) FROM pg_class WHERE relkind = \'r\' ORDER BY pg_total_relation_size(oid) DESC LIMIT 10;'
+
+-- Turn quiet mode off at the end
+\set QUIET 0
+
+\pset linestyle unicode
+

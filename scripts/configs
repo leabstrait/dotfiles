@@ -1,0 +1,265 @@
+#!/usr/bin/env bash
+# configs — Dotfile manager backed by a git repository.
+# Make executable and place on PATH: chmod +x configs && mv configs ~/bin/configs
+
+_CONFIGS_DIR="$HOME/ws/i/configs"
+_CONFIGS_REPO_URL="git@github.com:user/configs.git"
+_SCRIPT="$(realpath "$0")"
+
+# ── Tracked files ─────────────────────────────────────────────────────────────
+# Edit manually, or use: configs link / configs unlink
+# BEGIN_MAPS
+progs/bash/.bashrc|$HOME/.bashrc
+progs/bash/.bash_profile|$HOME/.bash_profile
+progs/bat/config|$HOME/.config/bat/config
+progs/git/.gitconfig|$HOME/.gitconfig
+progs/readline/.inputrc|$HOME/.inputrc
+progs/starship/starship.toml|$HOME/.config/starship.toml
+progs/vscode/settings.json|$HOME/.config/Code/User/settings.json
+progs/vscode/keybindings.json|$HOME/.config/Code/User/keybindings.json
+progs/kde/kglobalshortcutsrc|$HOME/.config/kglobalshortcutsrc
+progs/ssh/config|$HOME/.ssh/config
+progs/psql/.psqlrc|$HOME/.psqlrc
+# END_MAPS
+
+# ── MAPS helpers ──────────────────────────────────────────────────────────────
+
+# Read the MAPS block from this script (raw, $HOME not expanded).
+_configs_maps_raw() {
+    sed -n '/^# BEGIN_MAPS$/,/^# END_MAPS$/{/^# BEGIN_MAPS$/d;/^# END_MAPS$/d;p}' "$_SCRIPT"
+}
+
+# Emit resolved pairs: src_rel|/expanded/dest
+_configs_maps() {
+    while IFS='|' read -r src_rel dest_raw; do
+        [[ -z "$src_rel" ]] && continue
+        printf '%s|%s\n' "$src_rel" "${dest_raw/\$HOME/$HOME}"
+    done < <(_configs_maps_raw)
+}
+
+# Add an entry to the MAPS block (idempotent; stores $HOME symbolically).
+_configs_map_add() {
+    local src_rel="$1"
+    local dest="$2"
+    local dest_raw="${dest/$HOME/\$HOME}"
+    local entry="${src_rel}|${dest_raw}"
+
+    if _configs_maps_raw | grep -qxF "$entry"; then
+        return 0  # already tracked
+    fi
+
+    local tmp
+    tmp="$(mktemp)"
+    awk -v e="$entry" '/^# END_MAPS$/ { print e } { print }' "$_SCRIPT" > "$tmp"
+    chmod +x "$tmp"
+    mv "$tmp" "$_SCRIPT"
+    echo "   ➜ Added to MAPS: $entry"
+}
+
+# Remove entries whose dest matches $1 from the MAPS block.
+_configs_map_remove() {
+    local dest="$1"
+    local dest_raw="${dest/$HOME/\$HOME}"
+
+    if ! _configs_maps_raw | grep -qF "|${dest_raw}"; then
+        return 0  # not tracked, nothing to do
+    fi
+
+    local tmp
+    tmp="$(mktemp)"
+    awk -v d="|${dest_raw}" 'index($0, d) && /^[^#]/ { next } { print }' "$_SCRIPT" > "$tmp"
+    chmod +x "$tmp"
+    mv "$tmp" "$_SCRIPT"
+    echo "   ➜ Removed from MAPS: $dest_raw"
+}
+
+# ── Link helpers ──────────────────────────────────────────────────────────────
+
+_configs_link_file() {
+    local src="$1"
+    local dest="$2"
+    local backup="${dest}.backup"
+
+    # Already correct — nothing to do.
+    if [[ -L "$dest" && "$(readlink "$dest")" == "$src" ]]; then
+        return 0
+    fi
+
+    # Repo source must exist before we try to link it.
+    if [[ ! -e "$src" ]]; then
+        echo "⚠️  Skipping $dest — repo source missing: $src"
+        return 1
+    fi
+
+    # Real file at destination (not yet a symlink).
+    if [[ -e "$dest" && ! -L "$dest" ]]; then
+        echo "⚠️  Conflict at $dest"
+
+        if diff -q "$src" "$dest" >/dev/null 2>&1; then
+            echo "   ➜ Identical to repo. Converting to symlink..."
+            mv "$dest" "$backup"
+        else
+            echo "   ❗ Differs from repo. Launching interactive merge (sdiff)..."
+            echo "      l = keep repo · r = keep local · eb = edit both"
+            echo "   ──────────────────────────────────────────────────────"
+
+            local tmp_merge
+            tmp_merge="$(mktemp)"
+            cp "$src" "${src}.orig"   # protect original repo file
+
+            if sdiff -s -o "$tmp_merge" "$src" "$dest"; then
+                mv "$tmp_merge" "$src"
+                echo "   ➜ Repo file updated with merged result."
+                echo "   ➜ Pre-merge repo copy saved to ${src}.orig"
+            else
+                echo "   ➜ Merge cancelled. Repo file unchanged."
+                rm -f "$tmp_merge" "${src}.orig"
+            fi
+
+            mv "$dest" "$backup"
+            echo "   ➜ Local file backed up to $backup"
+        fi
+    fi
+
+    mkdir -p "$(dirname "$dest")"
+    [[ -L "$dest" ]] && rm "$dest"
+    ln -s "$src" "$dest"
+    echo "✅ Linked: $dest"
+}
+
+_configs_restore_file() {
+    local dest="$1"
+    local backup="${dest}.backup"
+
+    if [[ -L "$dest" && -f "$backup" ]]; then
+        rm "$dest"
+        mv "$backup" "$dest"
+        echo "⏪ Restored backup: $dest"
+    elif [[ -f "$backup" ]]; then
+        mv "$backup" "$dest"
+        echo "⏪ Restored backup (no active link): $dest"
+    elif [[ -L "$dest" ]]; then
+        rm "$dest"
+        echo "🗑️  Removed dangling link: $dest"
+    else
+        echo "   ➜ Nothing to restore for $dest"
+    fi
+}
+
+# ── Commands ──────────────────────────────────────────────────────────────────
+
+repo_dir="$_CONFIGS_DIR"
+cmd="${1:-}"
+
+case "$cmd" in
+
+    ""|"help")
+        cat <<USAGE
+configs — Dotfile manager backed by a git repository
+
+Commands:
+  link <repo_rel_path> <target_path>   Track and link a single file
+  link-all                             Link all files in MAPS
+  unlink <target_path>                 Break link, restore backup, remove from MAPS
+  unlink-all                           Restore all backups and remove all links
+  status                               Show link status of all tracked files
+  update                               Pull latest changes (clone if missing)
+  <git commands>                       Forwarded directly to the repo
+
+USAGE
+        ;;
+
+    "link-all")
+        echo "🔗 Syncing all symlinks..."
+        while IFS='|' read -r src_rel dest; do
+            _configs_link_file "$repo_dir/$src_rel" "$dest"
+        done < <(_configs_maps)
+        ;;
+
+    "unlink-all")
+        echo "🔓 Removing all symlinks and restoring backups..."
+        while IFS='|' read -r src_rel dest; do
+            _configs_restore_file "$dest"
+        done < <(_configs_maps)
+        ;;
+
+    "link")
+        if [[ -z "${2:-}" || -z "${3:-}" ]]; then
+            echo "Usage: configs link <repo_relative_path> <target_absolute_path>"
+            exit 1
+        fi
+        src="$repo_dir/$2"
+        dest="$3"
+
+        # Absorb a local-only file into the repo before linking.
+        if [[ -f "$dest" && ! -L "$dest" && ! -f "$src" ]]; then
+            mkdir -p "$(dirname "$src")"
+            cp "$dest" "$src"
+            echo "➜ Imported into repo: $2"
+        fi
+
+        _configs_link_file "$src" "$dest"
+        _configs_map_add "$2" "$dest"
+        ;;
+
+    "unlink")
+        if [[ -z "${2:-}" ]]; then
+            echo "Usage: configs unlink <target_absolute_path>"
+            exit 1
+        fi
+        dest="$2"
+        backup="${dest}.backup"
+
+        if [[ -L "$dest" ]]; then
+            src="$(readlink "$dest")"
+            rm "$dest"
+            if [[ -f "$backup" ]]; then
+                mv "$backup" "$dest"
+                echo "⏪ Link broken. Restored local backup."
+            elif [[ -f "$src" ]]; then
+                cp "$src" "$dest"
+                echo "⏪ Link broken. Copied repo file to $dest."
+            fi
+        else
+            echo "➜ $dest is not an active symlink."
+        fi
+
+        _configs_map_remove "$dest"
+        ;;
+
+    "status")
+        printf "%-55s %s\n" "TARGET" "STATUS"
+        printf "%-55s %s\n" \
+            "───────────────────────────────────────────────────────" \
+            "──────────────────────"
+        while IFS='|' read -r src_rel dest; do
+            local_src="$repo_dir/$src_rel"
+            if [[ -L "$dest" && "$(readlink "$dest")" == "$local_src" ]]; then
+                status="✅ linked"
+            elif [[ -L "$dest" ]]; then
+                status="⚠️  links elsewhere"
+            elif [[ -f "$dest" ]]; then
+                status="📄 unlinked (file exists)"
+            else
+                status="❌ missing"
+            fi
+            printf "%-55s %s\n" "$dest" "$status"
+        done < <(_configs_maps)
+        ;;
+
+    "update")
+        if [[ -d "$repo_dir/.git" ]]; then
+            echo "➜ Pulling latest changes (rebase + autostash)..."
+            git -C "$repo_dir" pull --rebase --autostash
+        else
+            echo "➜ Repo not found. Cloning..."
+            mkdir -p "$repo_dir"
+            git clone "$_CONFIGS_REPO_URL" "$repo_dir"
+        fi
+        ;;
+
+    *)
+        git -C "$repo_dir" "$@"
+        ;;
+
+esac

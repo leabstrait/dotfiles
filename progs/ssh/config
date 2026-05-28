@@ -1,0 +1,3 @@
+AddKeysToAgent ask
+
+Include ~/.ssh/conf.d/work.config

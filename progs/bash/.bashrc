@@ -56,6 +56,7 @@ export PROMPT_EOL_MARK=''               # Remove the trailing % at the end of ne
 
 # Less configuration
 export LESS="-S -R -F --incsearch --mouse --use-color -Dd+30 -Du+33 -Ds+99 -DP255.29 -DR255.29 -DE255.160 -DS255.33"
+export PAGER="less"
 
 # Colorize man pages with less
 export MANPAGER="less"
@@ -68,12 +69,12 @@ export EDITOR="code --wait"
 function run-help() {
 	COMMAND=$(echo "$READLINE_LINE" | sed 's/^[ \t]*//;s/[ \t]*$//')
 echo "sdf${COMMAND}sdfs"
-   help "$COMMAND" || man "$COMMAND"  || bash -c "${COMMAND} --help"  
-#man "$COMMAND"  
+   help "$COMMAND" || man "$COMMAND"  || bash -c "${COMMAND} --help"
+#man "$COMMAND"
 }
 bind -m vi-insert -x '"\eh": run-help' # Alt + h for help or manpage
 
-# Use bat instead of cat 
+# Use bat instead of cat
 alias cat="bat"
 
 # diff with color
@@ -89,7 +90,7 @@ eval "$(direnv hook bash)"
 
 # NVM - Node Version Manager
 
- source /usr/share/nvm/init-nvm.sh
+source /usr/share/nvm/init-nvm.sh
 
 # export NVM_DIR="$([ -z "${XDG_CONFIG_HOME-}" ] && printf %s "${HOME}/.nvm" || printf %s "${XDG_CONFIG_HOME}/nvm")"
 # [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh" # This loads nvm
@@ -103,6 +104,12 @@ alias pmrefresh='sudo reflector --country AU,DE --age 24 --protocol https --sort
 # Command not found, suggest package
 source /usr/share/doc/pkgfile/command-not-found.bash
 
+
+# SSH
+if [[ -z "${SSH_CONNECTION}" ]]; then
+   export SSH_AUTH_SOCK="$XDG_RUNTIME_DIR/ssh-agent.socket"
+   # ssh-add ~/.ssh/id_ed25519
+fi
 
 # system utils
 

@@ -14,10 +14,16 @@
     "accessibility.signals.terminalBell": {
         "sound": "on"
     },
+    "accessibility.signals.terminalCommandFailed": {
+        "sound": "on"
+    },
     "autoDocstring.docstringFormat": "sphinx",
     "chat.disableAIFeatures": true,
     "cSpell.userWords": [
+        "autoref",
         "djhtml",
+        "hightlight",
+        "JINJABASE",
         "outerjoin"
     ],
     "debug.console.fontFamily": "NotoSansM Nerd Font Mono",
@@ -40,15 +46,17 @@
     "editor.guides.bracketPairs": false,
     "editor.guides.indentation": false,
     "editor.inlayHints.enabled": "off",
-    "editor.inlineSuggest.enabled": true,
     "editor.inlineSuggest.showToolbar": "always",
     "editor.lineNumbers": "on",
-    "editor.minimap.autohide": "mouseover",
+    "editor.minimap.autohide": "scroll",
     "editor.renderControlCharacters": true,
     "editor.renderLineHighlight": "all",
     "editor.renderWhitespace": "all",
     "editor.smoothScrolling": true,
+    "editor.tabCompletion": "on",
     "editor.wordWrap": "off",
+    "emmet.triggerExpansionOnTab": true,
+    "emmet.useInlineCompletions": true,
     "files.autoSave": "afterDelay",
     "files.defaultLanguage": "${activeEditorLanguage}",
     "files.trimTrailingWhitespace": true,
@@ -58,7 +66,7 @@
     "git.pruneOnFetch": true,
     "git.untrackedChanges": "separate",
     "html.format.indentInnerHtml": true,
-    "javascript.suggest.paths": false,
+    "js/ts.suggest.paths": false,
     "python-envs.terminal.showActivateButton": true,
     "python.terminal.activateEnvironment": false,
     "remote.tunnels.access.preventSleep": true,
@@ -68,29 +76,80 @@
     "terminal.integrated.enablePersistentSessions": false,
     "terminal.integrated.enableVisualBell": true,
     "terminal.integrated.fontFamily": "NotoSansM Nerd Font Mono",
+    "terminal.integrated.profiles.linux": {
+        "Aider AI": {
+            "args": [
+                "-c",
+                "export OLLAMA_API_BASE=http://localhost:11434; aider --model ollama/aider-coder; exec bash"
+            ],
+            "icon": "robot",
+            "path": "bash"
+        },
+        "bash": {
+            "icon": "terminal-bash",
+            "path": "bash"
+        },
+        "fish": {
+            "path": "fish"
+        },
+        "pwsh": {
+            "icon": "terminal-powershell",
+            "path": "pwsh"
+        },
+        "tmux": {
+            "icon": "terminal-tmux",
+            "path": "tmux"
+        },
+        "zsh": {
+            "path": "zsh"
+        }
+    },
     "terminal.integrated.smoothScrolling": true,
     "terminal.integrated.tabs.enabled": true,
-    "typescript.suggest.paths": false,
     "window.autoDetectColorScheme": true,
-    "window.customTitleBarVisibility": "never",
     "window.dialogStyle": "custom",
-    "window.menuBarVisibility": "toggle",
-    "window.titleBarStyle": "native",
-    "window.zoomLevel": -0.75,
-    "workbench.activityBar.location": "hidden",
     "workbench.colorCustomizations": {
         "editor.lineHighlightBackground": "#1073cf2d",
         "editor.lineHighlightBorder": "#9fced11f"
     },
-    "workbench.colorTheme": "Default Light Modern",
+    "workbench.colorTheme": "Monokai Pro Light",
     "workbench.editor.centeredLayoutFixedWidth": true,
     "workbench.editor.closeEmptyGroups": false,
     "workbench.editor.enablePreview": false,
     "workbench.editor.highlightModifiedTabs": true,
     "workbench.editor.titleScrollbarVisibility": "hidden",
+    "workbench.iconTheme": "Monokai Pro Light Icons",
     "workbench.list.smoothScrolling": true,
+    "workbench.productIconTheme": "material-product-icons",
     "workbench.secondarySideBar.defaultVisibility": "hidden",
     "workbench.sideBar.location": "right",
     "workbench.startupEditor": "none",
-    "workbench.tree.renderIndentGuides": "always"
+    "workbench.tree.renderIndentGuides": "always",
+    "workbench.experimental.share.enabled": true,
+    "window.zoomLevel": -0.95,
+    "window.menuStyle": "custom",
+    "git.detectWorktrees": true,
+    "json.schemaDownload.trustedDomains": {
+        "https://schemastore.azurewebsites.net/": true,
+        "https://raw.githubusercontent.com/microsoft/vscode/": true,
+        "https://raw.githubusercontent.com/devcontainers/spec/": true,
+        "https://www.schemastore.org/": true,
+        "https://json.schemastore.org/": true,
+        "https://json-schema.org/": true,
+        "https://developer.microsoft.com/json-schemas/": true,
+        "https://biomejs.dev": true
+    },
+    "explorer.autoReveal": "focusNoScroll",
+    "python.analysis.typeCheckingMode": "basic",
+    "workbench.editor.editorActionsLocation": "titleBar",
+    "workbench.editor.showTabs": "none",
+    "workbench.preferredLightColorTheme": "Night Owl Light",
+    "workbench.activityBar.compact": true,
+    "workbench.activityBar.location": "hidden",
+    "editor.linkedEditing": true,
+    "git.blame.editorDecoration.enabled": true,
+    "workbench.preferredDarkColorTheme": "Night Owl",
+    "window.customTitleBarVisibility": "never",
+    "window.controlsStyle": "custom",
+    "window.titleBarStyle": "native",
 }

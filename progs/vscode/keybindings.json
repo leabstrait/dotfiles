@@ -1,0 +1,12 @@
+[
+    {
+        "key": "ctrl+k a",
+        "command": "continue.openInNewWindow",
+        "when": "!terminalFocus"
+    },
+    {
+        "key": "ctrl+k ctrl+m",
+        "command": "-continue.openInNewWindow",
+        "when": "!terminalFocus"
+    }
+]
