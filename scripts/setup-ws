@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+
+mkdir --parents $HOME/ws/e
+mkdir --parents $HOME/ws/i
+mkdir --parents $HOME/ws/x

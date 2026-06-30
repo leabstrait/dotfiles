@@ -1,0 +1,532 @@
+#+TITLE: Dynamic Emacs Environment (Modular Specification)
+#+AUTHOR: Configuration Author
+#+PROPERTY: header-args:elisp :tangle yes :results silent
+
+* INTRODUCTION: THE EMACS KEYBIND PHILOSOPHY & STRUCTURE
+
+  Unlike modern text editors that rely on a static set of shortcuts (like ~Ctrl+C~ for copy, ~Ctrl+V~ for paste), Emacs treats the keyboard as a fluent, modal command interface. Every single keypress or combination runs a discrete Lisp function under the hood.
+
+**** The Core Input Philosophy
+  The Emacs keyboard philosophy is designed around three core principles:
+  1. *Touch-Typist Efficiency*: Standard shortcuts avoid the function keys (~F1~-~F12~), arrow keys, or mouse inputs. Keeping your hands anchored to the home row minimizes physical strain during long development sessions.
+  2. *Infinite Extensibility*: Because Emacs has thousands of built-in commands, it uses **Chords** (pressing multiple keys sequentially) to prevent running out of keyboard real estate.
+  3. *Contextual Adaptability*: The meaning of your keys changes depending on the file type you are editing, creating a contextual interface that adapts to your workflow.
+
+**** Anatomy of a Keybind: Prefixes and Chords
+  Emacs groups commands logically using **Prefix Keys**. A prefix key acts as a gateway to a specific family of commands. Once you press a prefix, Emacs waits for the next key in the "chord".
+
+  - ~C-x~ *(Control + x)*: The **Global System Prefix**. Used for fundamental editor operations like handling buffers, opening files, and quitting.
+     - ~C-x C-s~: Save the current file.
+     - ~C-x C-b~: List open buffers.
+  - ~C-c~ *(Control + c)*: The **User / Mode Prefix**. Reserved specifically for user customizations and major-mode specific commands.
+     - ~C-c l~: Bound to our Language Server Protocol (~lsp-mode~) map in this configuration.
+  - ~M-x~ *(Alt + x)*: The **Command HUD**. This opens a minibuffer where you can type out and execute *any* Emacs function by its plain-text name, completely bypassing the need for a physical keybinding.
+
+**** The Keymap Hierarchy
+  When you press a key, Emacs filters your input through a strict map hierarchy. The first map that contains a definition for your key combination wins:
+
+  1. *Emulation Maps*: Used by packages like `evil-mode` (Vim emulation) to completely hijack inputs.
+  2. *Minor Mode Maps*: Modular, opt-in features that span across major modes (e.g., `yafolding-mode` or `lsp-mode`). These override major modes to ensure their utilities remain globally accessible.
+  3. *Major Mode Maps*: File-type specific configurations (e.g., `python-mode`, `js-mode`). Pressing ~TAB~ in Python indents by 4 spaces, while in web-mode it might indent by 2.
+  4. *Global Map*: The catch-all baseline map. If a key isn't claimed by a major or minor mode, Emacs looks here (e.g., your custom ~C-z~ undo configurations).
+
+  #+BEGIN_SRC elisp
+    (add-to-list 'load-path "~/.emacs.d/elpa/highlight-indent-guides-20260202.1243/")
+    (require 'highlight-indent-guides)
+    (setq highlight-indent-guides-method 'character)
+    (setq highlight-indent-guides-character ?\┊)
+
+    (add-hook
+     'prog-mode-hook
+     '(lambda()
+        (require 'highlight-indent-guides)
+        (highlight-indent-guides-mode)))
+  #+END_SRC
+
+  ---
+
+* 1. CORE ARCHITECTURE & SYSTEM ENVIRONMENT
+
+**** 1.1. Editor Diagnostics & Optimization
+***** 1.1.1. Native Compilation Warnings
+  Inhibit native compilation warning buffers from popping up asynchronously over our workspaces.
+  #+BEGIN_SRC elisp
+  (setq native-comp-async-report-warnings-errors 'silent)
+  #+END_SRC
+
+**** 1.2. Graphical Canvas & Frame Configurations
+***** 1.2.1. Basic Window Geometry & Universal Overrides
+  Forces the frame engine to explicitly paint its toolkit menus and window properties from the active loaded theme colors, rather than reading raw system defaults.
+  #+BEGIN_SRC elisp
+  (setq-default toggle-truncate-lines t) ; Always truncate long lines
+  (setq truncate-lines t)
+
+  ;; Explicitly enforce showing all elements from Options > Show/Hide
+  (when (fboundp 'tool-bar-mode) (tool-bar-mode 1))
+  (when (fboundp 'menu-bar-mode) (menu-bar-mode 1))
+  (when (fboundp 'scroll-bar-mode) (scroll-bar-mode 0))
+  #+END_SRC
+
+***** 1.2.2. Frame Indicators & Decorative Overlays
+  #+BEGIN_SRC elisp
+  (column-number-mode t)
+  (display-battery-mode t)
+  (display-time-mode t)
+  (size-indication-mode t)
+  (tab-bar-mode t)
+
+  (setq indicate-empty-lines t)
+  (setq indicate-buffer-boundaries '((top . left) (bottom . left) (up . left) (down . left)))
+  #+END_SRC
+
+***** 1.2.3. Typography & Font Specifications
+  Configures **NotoSansM Nerd Font Mono** at a compact, precise size (95/10pt) matching standard terminal system settings.
+  #+BEGIN_SRC elisp
+  (set-frame-font "NotoSansM Nerd Font Mono-11" nil t)
+  (setq font-use-system-font t)
+  #+END_SRC
+
+**** 1.3. Global Text Formatting & Indentation Defaults
+***** 1.3.1. Tab Space Enforcements
+  #+BEGIN_SRC elisp
+  (setq-default indent-tabs-mode nil)
+  (setq-default tab-width 4)
+  #+END_SRC
+
+* Interface Customizations
+
+**** Line Numbers
+  Enable fast, modern built-in line numbers globally. Relative numbers are used for better code navigation.
+  #+begin_src elisp
+    (global-display-line-numbers-mode 1)
+    (setq display-line-numbers-type 'relative)
+
+    ;; Disable line numbers in specific buffers where they don't make sense
+    (dolist (mode '(term-mode-hook
+                    shell-mode-hook
+                    eshell-mode-hook
+                    magit-status-mode-hook))
+      (add-hook mode (lambda () (display-line-numbers-mode 0))))
+  #+end_src
+
+**** Text Wrapping (Truncation)
+  Disable text wrapping globally for code layout, but enable soft wrapping (Visual Line Mode) for prose files.
+  #+begin_src elisp
+  ;; Disable text wrapping globally (lines truncate at the window edge)
+  (setq-default truncate-lines t)
+
+  ;; Enable soft wrapping automatically only for text and documentation modes
+  (add-hook 'text-mode-hook 'visual-line-mode)
+  (add-hook 'markdown-mode-hook 'visual-line-mode)
+  (add-hook 'org-mode-hook 'visual-line-mode)
+  #+end_src
+
+* Automation & File Handling
+
+**** Modern Autosave
+  Save actual files automatically when Emacs is idle or when switching focus to another application window.
+  #+begin_src elisp
+  ;; Enable built-in auto-save when Emacs is idle for 1 second
+  (auto-save-visited-mode 1)
+  (setq auto-save-visited-interval 1)
+
+  ;; Save files automatically whenever Emacs loses focus
+  (add-hook 'focus-out-hook (lambda () (save-some-buffers t)))
+  #+end_src
+
+**** Buffer Cleanup on Save
+  Automatically strip trailing whitespaces and clean up empty trailing lines safely.
+  #+begin_src elisp
+  ;; Delete all trailing whitespace before saving a file
+  (add-hook 'before-save-hook 'delete-trailing-whitespace)
+
+  ;; Ensure there is exactly one newline at the end of the file
+  (setq require-final-newline t)
+  (setq mode-require-final-newline t)
+  #+end_src
+
+**** Whitespace Visualization
+  A clean, non-intrusive way to display invisible characters that respects modus-vivendi.
+  #+begin_src elisp
+  ;; 1. Base styles to monitor (excluding hardcoded backgrounds)
+  (setq whitespace-style '(face spaces space-mark tabs tab-mark trailing))
+
+  ;; Enable minimal whitespace visibility globally
+  (global-whitespace-mode 1)
+  #+end_src
+
+**** Global Auto-Revert Configuration
+  Automatically reload files when changed on disk by external applications.
+  #+begin_src elisp
+  ;; Automatically reload files changed on disk globally
+  (global-auto-revert-mode 1)
+
+  ;; Also auto-reload non-file buffers like Dired directories
+  (setq global-auto-revert-non-file-buffers t)
+
+  ;; Make Emacs check files instantly using file system notifications (instead of a slow timer)
+  (setq auto-revert-use-notify t)
+  #+end_src
+
+  ---
+
+* 2. THEME & DESKTOP INTERNALS INTEGRATION
+** 2.1. Theme dark for long sessions
+#+BEGIN_SRC elisp
+;; Load the theme immediately as it comes from the factory
+(load-theme 'modus-vivendi t)
+#+END_SRC
+
+---
+
+* 3. INTERACTIVE SEARCH, NAVIGATION, & MINIBUFFER UTILITIES
+
+#+BEGIN_SRC elisp
+(defun ediff-clipboard-with-file (file-name)
+  "Compare a file with the contents of the system clipboard using ediff."
+  (interactive "fSelect file to compare with clipboard: ")
+  (let ((clipboard-content (current-kill 0)))
+    (with-temp-buffer
+      (insert clipboard-content)
+      ;; Name the temp buffer so Ediff can label it
+      (rename-buffer "*clipboard-content*")
+      (ediff-buffers (current-buffer) file-name))))
+
+;; Bind to a convenient key, e.g., C-c e c
+(global-set-key (kbd "C-c e c") 'ediff-clipboard-with-file)
+
+(setq ediff-split-window-function 'split-window-horizontally)
+(setq ediff-window-setup-function 'ediff-setup-windows-plain)
+#+END_SRC
+
+** 3.1. Helm Ecosystem Core
+*** 3.1.1. Initialization & Framework Bindings
+#+BEGIN_SRC elisp
+(use-package helm
+  :ensure t
+  :init
+  (helm-mode 1)
+  :config
+  (setq helm-allow-mouse t)
+  (customize-set-variable 'helm-ff-lynx-style-map t)
+
+  (define-key global-map [remap list-buffers] 'helm-buffers-list)
+  (define-key global-map [remap execute-extended-command] 'helm-M-x)
+  (define-key global-map [remap find-file] 'helm-find-files)
+  (define-key global-map [remap switch-to-buffer] #'helm-mini))
+#+END_SRC
+
+*** 3.1.2. Keymap Overrides (Tab-Selection Mechanics)
+#+BEGIN_SRC elisp
+(with-eval-after-load 'helm
+  (define-key helm-map (kbd "<tab>") 'helm-next-line)
+  (define-key helm-map (kbd "<backtab>") 'helm-previous-line)
+  (define-key helm-map (kbd "<right>") 'helm-execute-persistent-action)
+  (define-key helm-map (kbd "<left>") 'helm-execute-persistent-action))
+#+END_SRC
+
+*** 3.1.3. Lisp Evaluation Completions
+#+BEGIN_SRC elisp
+(with-eval-after-load 'helm
+  (unless (boundp 'completion-in-region-function)
+    (define-key lisp-interaction-mode-map [remap completion-at-point] 'helm-lisp-completion-at-point)
+    (define-key emacs-lisp-mode-map       [remap completion-at-point] 'helm-lisp-completion-at-point)))
+#+END_SRC
+
+---
+
+* 4. EDITING WORKFLOWS & HISTORY VIRTUALIZATION
+
+** 4.1. Undo-Tree Virtualization Engine
+*** 4.1.1. Contextual Mappings & Save Behaviors
+#+BEGIN_SRC elisp
+(use-package undo-tree
+  :ensure t
+  :init
+  (global-undo-tree-mode 1)
+  :config
+  (setq undo-tree-visualizer-timestamps t)
+  (setq undo-tree-visualizer-diff t)
+  (setq undo-tree-auto-save-history nil)
+
+  (global-unset-key (kbd "C-z"))
+  (global-set-key (kbd "C-z") 'undo-only)
+  (global-set-key (kbd "C-S-z") 'undo-tree-redo))
+#+END_SRC
+
+#+BEGIN_SRC elisp
+
+(require 'symbol-overlay)
+
+(global-set-key
+ (kbd "<C-mouse-3>")
+ (lambda (event)
+   (interactive "e")
+   (save-excursion
+     (goto-char (posn-point (event-start event)))
+     (symbol-overlay-put))))
+#+END_SRC
+
+** 4.2. Structural Selection Upgrades
+*** 4.2.1. Expand Region Mappings
+#+BEGIN_SRC elisp
+(use-package expand-region
+  :ensure t
+  :bind (("C-S-SPC" . er/expand-region)
+         ("C-SPC" . (lambda ()
+                      (interactive)
+                      (if (use-region-p)
+                          (er/contract-region 1)
+                        (call-interactively 'set-mark-command))))))
+#+END_SRC
+
+** 4.3. Code Folding Engines
+*** 4.3.1. Yafolding Hook Placements
+#+BEGIN_SRC elisp
+(use-package yafolding
+  :ensure t
+  :hook ((prog-mode . yafolding-mode)
+         (compilation-mode . yafolding-mode)))
+#+END_SRC
+
+---
+
+* 5. VERSATILE UTILITIES & VERSION CONTROL
+
+#+BEGIN_SRC elisp
+  (require 'yasnippet)
+  (require 'yasnippet-snippets)
+  (yas-reload-all)
+  (add-hook 'prog-mode-hook 'yas-minor-mode-on)
+  (add-hook 'org-mode-hook 'yas-minor-mode-on)
+#+END_SRC
+
+** 5.1. Magit Engine
+#+BEGIN_SRC elisp
+    (use-package magit
+      :commands magit-status
+      :bind ("C-x g" . magit-status))
+
+    (global-set-key (kbd "C-x C-l") 'magit-log-buffer-file)  ; unbind (downcase-region)
+
+    (setq transient-default-level 7)
+#+END_SRC
+
+** 5.2. Org Core Ecosystem
+#+BEGIN_SRC elisp
+  (use-package org
+    :defer t
+    :config
+    (setq org-ellipsis " ▾"
+          org-hide-leading-stars t
+          org-log-done 'time))
+
+
+(setq org-adapt-indentation t) ; edit structure (indent content also)
+(setq org-support-shift-select t) ; enable text-selection when possible
+(add-hook 'org-mode-hook 'lambda() (require 'org-mouse))
+#+END_SRC
+
+** 5.3. Key Discovery Popups
+#+BEGIN_SRC elisp
+(use-package which-key
+  :init
+  (which-key-mode)
+  :config
+  (setq which-key-idle-delay 0.3))
+#+END_SRC
+
+---
+
+* 6. LANGUAGE SERVER PROTOCOL & DEVELOPMENT ENVIRONMENTS
+
+** 6.1. LSP Core Framework Orchestration
+*** 6.1.1. LSP-Mode Protocol Config
+#+BEGIN_SRC elisp
+(use-package lsp-mode
+  :commands (lsp lsp-deferred)
+  :hook ((python-mode . lsp-deferred)
+         (js-mode . lsp-deferred)
+         (js2-mode . lsp-deferred)
+         (typescript-mode . lsp-deferred)
+         (html-mode . lsp-deferred))
+  :init
+  (setq lsp-keymap-prefix "C-c l")
+  :config
+  (setq lsp-enable-indentation t
+        lsp-diagnostics-provider :flycheck)
+  (lsp-enable-which-key-integration t))
+#+END_SRC
+
+*** 6.1.2. LSP Graphic User Interface Enhancements
+#+BEGIN_SRC elisp
+(use-package lsp-ui
+  :commands lsp-ui-mode
+  :hook (lsp-mode . lsp-ui-mode)
+  :config
+  (setq lsp-ui-doc-enable t
+        lsp-ui-sideline-enable t))
+#+END_SRC
+
+** 6.2. Languages & Build Context Environments
+*** 6.2.1. Python Environment Ecosystem (Ruff & Pyright Integration)
+#+BEGIN_SRC elisp
+(use-package python
+  :mode ("\\.py\\'" . python-mode)
+  :config
+  (setq lsp-pylsp-plugins-ruff-enabled t
+        lsp-pylsp-plugins-pyright-enabled t
+        lsp-pylsp-plugins-flake8-enabled nil
+        lsp-pylsp-plugins-mccabe-enabled nil
+        lsp-pylsp-plugins-pycodestyle-enabled nil))
+#+END_SRC
+
+*** 6.2.2. SCons Build Automation Submodes
+#+BEGIN_SRC elisp
+(setq compile-command "/usr/bin/python /usr/bin/scons")
+
+(define-derived-mode scons-mode python-mode "scons"
+  "A specialized submode derivative targeting SCons software building files.")
+
+(add-to-list 'auto-mode-alist '("SConstruct" . scons-mode))
+(add-to-list 'auto-mode-alist '("SConscript" . scons-mode))
+#+END_SRC
+
+*** 6.2.3. Web Development Layout Specifications (JS / HTML)
+#+BEGIN_SRC elisp
+(use-package js
+  :mode ("\\.js\\'" . js-mode)
+  :config
+  (setq js-indent-level 2))
+
+(add-to-list 'auto-mode-alist '("\\.mjs$" . js-mode))
+
+(use-package mhtml-mode
+  :mode ("\\.html?\\'" . mhtml-mode))
+#+END_SRC
+
+** 6.3. Built-In Project Compilation Infrastructure
+#+BEGIN_SRC elisp
+  (global-set-key (kbd "C-<f9>") 'project-compile)
+  (global-set-key (kbd "C-S-t") 'project-shell)
+  (global-set-key (kbd "C-S-f") 'project-find-file)
+  (global-set-key (kbd "C-S-g") 'project-find-regexp)
+
+(setq compilation-buffer-name-function
+      (lambda (name-of-mode)
+        (generate-new-buffer-name (concat "*" (downcase name-of-mode) "*"))))
+
+  #+END_SRC
+
+** 6.4. Shell & Native Compilation Color Enhancements
+#+BEGIN_SRC elisp
+  (use-package ansi-color
+    :hook (compilation-filter . ansi-color-compilation-filter))
+#+END_SRC
+
+
+* Major Modes & File Types
+
+** High Performance Terminal (vterm)
+Install and configure the libgterm-backed terminal emulator for lightning-fast command handling and full shell interaction.
+
+#+begin_src elisp
+  (use-package vterm
+    :ensure t
+    :config
+    ;; Max out scrollback history limit
+    (setq vterm-max-scrollback 10000)
+
+    ;; Map your default shell shell binary explicitly
+    (setq vterm-shell "/bin/bash") ; Swap with "/bin/zsh" if applicable
+
+    ;; Explicitly keep your minimal 4-space layout preferences intact inside terms
+    (setq-default tab-width 4))
+
+  ;; Bind a quick shortcut to launch or toggle the terminal instance instantly
+  (keymap-global-set "C-c t" 'vterm)
+#+end_src
+
+
+* Editor Layout & Indentation
+
+** Global Space Indentation
+Force Emacs to use spaces instead of literal tab characters for indentation globally, and set the default fallback size to 4 spaces.
+
+#+begin_src elisp
+;; Use spaces instead of tabs globally
+(setq-default indent-tabs-mode nil)
+
+;; Set default fallback indentation width to 4 spaces
+(setq-default tab-width 4)
+(setq-default c-basic-offset 4)
+#+end_src
+
+* Major Modes & File Types
+
+** Web Mode with Tree-Sitter & Auto-Completion
+Enhanced Django HTML (`.djhtml`) configuration with modern treesit-based syntax objects, company-mode completion, and explicit 4-space layout.
+
+#+begin_src elisp
+(use-package web-mode
+  :ensure t
+  :mode (("\\.djhtml\\'" . web-mode)
+         ("\\.html\\.djhtml\\'" . web-mode))
+  :init
+  ;; Turn on modern tree-sitter context parsing if available
+  (setq web-mode-enable-tree-sitter t)
+  :config
+  ;; Force Django engine for djhtml extensions
+  (setq web-mode-engines-alist
+        '(("django" . "\\.djhtml\\'")))
+
+  ;; Configure Web-Mode matching 4-space indentation layout
+  (setq web-mode-markup-indent-offset 4)
+  (setq web-mode-css-indent-offset 4)
+  (setq web-mode-code-indent-offset 4)
+  (setq web-mode-sql-indent-offset 4)
+
+  ;; HTML tag behavior automation
+  (setq web-mode-enable-auto-pairing t)
+  (setq web-mode-enable-auto-closing t)
+  (setq web-mode-enable-auto-quoting t)
+
+  ;; Hook up company-mode for inline completion popup inside template tags
+  (add-hook 'web-mode-hook
+            (lambda ()
+              (when (fboundp 'company-mode)
+                (company-mode 1)))))
+
+(use-package company
+  :ensure t
+  :defer t
+  :init
+  (global-company-mode 1)
+  :config
+  ;; Speed up context popups for a snappier feel
+  (setq company-idle-delay 0.1)
+  (setq company-minimum-prefix-length 1))
+#+end_src
+
+
+---
+
+* 7. FUTURE COMPONENT EXTENSION SLOTS
+
+** 7.1. Terminal Emulation Modules (vterm / eshell)
+*** 7.1.1. Context Configurations
+#+BEGIN_SRC elisp
+;; Reserved for terminal shell customization
+#+END_SRC
+
+** 7.2. Containers & Cloud Engineering (Docker / Kubernetes / Ansible)
+*** 7.2.1. Context Configurations
+#+BEGIN_SRC elisp
+;; Reserved for orchestration configurations
+#+END_SRC
+
+** 7.3. Advanced Completion Tooling (Corfu / Vertico / Marginalia)
+*** 7.3.1. Context Configurations
+#+BEGIN_SRC elisp
+;; Reserved for alternative interactive layouts
+#+END_SRC

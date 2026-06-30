@@ -114,7 +114,12 @@ Pulls down a modern graphical desktop pipeline complete with standard peripheral
     sddm \
     konsole \
     dolphin \
-    plasma-systemmonitor
+    plasma-systemmonitor \
+    kde-gtk-config \
+    breeze-gtk \
+    xdg-desktop-portal \
+    xdg-desktop-portal-kde \
+    xdg-desktop-portal-gtk
 
   echo "=== Launching Initial Background Control Daemons ==="
   systemctl enable sddm.service
@@ -135,6 +140,10 @@ Integrates your standard cryptographic keychain manager pipelines with dynamic P
 
 ** Interactive Visual Polish & UI Customization Blueprint
 The following rules outline systemic settings modifications that must be applied manually within your desktop management dashboard:
+  * window decoration and active window
+1. window decorations > show circle around close button, it is minimal way to identify the active window
+
+#6ae4b9 is the accent color for kde now
 
 *** Workspace Pager Systems
 1. Open **System Settings** -> **Window Management** -> **Virtual Desktops**.
@@ -173,6 +182,9 @@ The following rules outline systemic settings modifications that must be applied
 2. Assign a high-contrast theme configuration named =Light=.
 3. Assign a low-intensity fallback nighttime schema named =Dark=.
 
+  * GTK sync with KDE Plasma
+1. System Settings > Colors & Themes > Application Style > Configure GNOME/GTK Application Style
+
 ---
 
 * Typography & Environmental Shell Tooling
@@ -190,7 +202,7 @@ Provides core unicode definitions across diverse structural glyphs, CJK alphabet
     ttf-font-awesome
 
   echo "=== Installing Nerd Fonts Matrix Packages ==="
-  pacman -S --noconfirm ttf-nerd-fonts-symbols-common
+ pacman -S --noconfirm ttf-nerd-fonts-symbols-common
 #+END_SRC
 
 ** Modern Command-Line Utility Ecosystem
@@ -198,7 +210,7 @@ Deploys responsive modern alternatives to aging standard Unix binaries alongside
 
 #+BEGIN_SRC shell
   echo "=== Installing Environmental Enhancement Binaries ==="
-  pacman -S  --noconfirm starship nvm eza bat
+  pacman -S --noconfirm starship nvm eza bat
 #+END_SRC
 
 ---
@@ -210,7 +222,7 @@ Sets up isolated local offline machine inference servers alongside standard back
 
 #+BEGIN_SRC shell
   echo "=== Installing Inference Execution Engines ==="
-  pacman -S --noconfirm llama.cpp/ollama
+  pacman -S llama.cpp/ollama
 
   echo "=== Scaffolding Local Storage Models Block ==="
   mkdir -p ~/ai/models

@@ -1,8 +1,0 @@
-#!/usr/bin/env bash
-set -euo pipefail
-
-
-mkdir $HOME/ws
-mkdir $HOME/ws/e
-mkdir $HOME/ws/i
-mkdir $HOME/ws/x

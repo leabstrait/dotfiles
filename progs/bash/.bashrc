@@ -55,7 +55,8 @@ export WORDCHARS=${WORDCHARS//\/[&.;]/} # Exclude certain characters from word b
 export PROMPT_EOL_MARK=''               # Remove the trailing % at the end of newlines
 
 # Less configuration
-export LESS="-S -R -F --incsearch --mouse --use-color -Dd+30 -Du+33 -Ds+99 -DP255.29 -DR255.29 -DE255.160 -DS255.33"
+# Less configuration (Strict numerical mapping for Modus-Vivendi)
+export LESS="-S -R -F --incsearch --mouse --use-color -Dd33.16 -Du160.16 -Ds15.16 -DP15.236 -DR160.16 -DE15.125 -DS16.220"
 export PAGER="less"
 
 # Colorize man pages with less
@@ -63,19 +64,19 @@ export MANPAGER="less"
 export MANROFFOPT="-P -c"
 
 # EDITOR variable
-export EDITOR="code --wait"
+export EDITOR="emacs"
+
 
 # Function to run help or man page
 function run-help() {
-	COMMAND=$(echo "$READLINE_LINE" | sed 's/^[ \t]*//;s/[ \t]*$//')
-echo "sdf${COMMAND}sdfs"
+   COMMAND=$(echo "$READLINE_LINE" | sed 's/^[ \t]*//;s/[ \t]*$//')
    help "$COMMAND" || man "$COMMAND"  || bash -c "${COMMAND} --help"
-#man "$COMMAND"
 }
-bind -m vi-insert -x '"\eh": run-help' # Alt + h for help or manpage
+bind  -x '"\eh": run-help' # Alt + h for help or manpage
 
 # Use bat instead of cat
 alias cat="bat"
+export BAT_THEME="ansi"
 
 # diff with color
 alias diff="diff --color=auto"
@@ -84,22 +85,16 @@ alias diff="diff --color=auto"
 alias grep="grep --color=auto"
 
 
-# direnv
-eval "$(direnv hook bash)"
-
-
 # NVM - Node Version Manager
 
 source /usr/share/nvm/init-nvm.sh
-
-# export NVM_DIR="$([ -z "${XDG_CONFIG_HOME-}" ] && printf %s "${HOME}/.nvm" || printf %s "${XDG_CONFIG_HOME}/nvm")"
-# [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh" # This loads nvm
 
 
 # Package manager
 
 # alias to generate and save mirrorlist for pacman
 alias pmrefresh='sudo reflector --country AU,DE --age 24 --protocol https --sort rate --save /etc/pacman.d/mirrorlist'
+
 
 # Command not found, suggest package
 source /usr/share/doc/pkgfile/command-not-found.bash

@@ -1,265 +1,454 @@
-#!/usr/bin/env bash
-# configs — Dotfile manager backed by a git repository.
-# Make executable and place on PATH: chmod +x configs && mv configs ~/bin/configs
+#!/usr/bin/env python
+import os
+import sys
+import shutil
+import subprocess
+import configparser
+import socket
+from pathlib import Path
 
-_CONFIGS_DIR="$HOME/ws/i/configs"
-_CONFIGS_REPO_URL="git@github.com:user/configs.git"
-_SCRIPT="$(realpath "$0")"
+# ── Configuration Constants ───────────────────────────────────────────────────
+CONFIGS_DIR = Path.home() / "ws/i/configs"  # Enforced fixed workspace location
+CONFIGS_REPO_URL = "git@github.com:user/configs.git"
 
-# ── Tracked files ─────────────────────────────────────────────────────────────
-# Edit manually, or use: configs link / configs unlink
-# BEGIN_MAPS
-progs/bash/.bashrc|$HOME/.bashrc
-progs/bash/.bash_profile|$HOME/.bash_profile
-progs/bat/config|$HOME/.config/bat/config
-progs/git/.gitconfig|$HOME/.gitconfig
-progs/readline/.inputrc|$HOME/.inputrc
-progs/starship/starship.toml|$HOME/.config/starship.toml
-progs/vscode/settings.json|$HOME/.config/Code/User/settings.json
-progs/vscode/keybindings.json|$HOME/.config/Code/User/keybindings.json
-progs/kde/kglobalshortcutsrc|$HOME/.config/kglobalshortcutsrc
-progs/ssh/config|$HOME/.ssh/config
-progs/psql/.psqlrc|$HOME/.psqlrc
-# END_MAPS
+def ensure_env(map_file: Path):
+    """Ensure host config directories and tracking files exist securely before reads/writes."""
+    try:
+        map_file.parent.mkdir(parents=True, exist_ok=True)
+        if not map_file.exists():
+            with open(map_file, 'w') as f:
+                f.write("[mappings]\n")
+    except IOError as e:
+        print(f"❌ Critical Environment Failure: Unable to setup configuration directory. Error: {e}")
+        sys.exit(1)
 
-# ── MAPS helpers ──────────────────────────────────────────────────────────────
+# ── Path Expansion & Symbolic Serialization Helpers ─────────────────────────────
+def expand_paths(raw_dest, raw_src):
+    """Convert symbolic strings ($HOME, $CONFIGS_DIR) into explicit absolute paths."""
+    dest = raw_dest.replace("$HOME", str(Path.home()))
+    src = raw_src.replace("$CONFIGS_DIR", str(CONFIGS_DIR)).replace("$HOME", str(Path.home()))
+    return Path(dest).absolute(), Path(src).absolute()
 
-# Read the MAPS block from this script (raw, $HOME not expanded).
-_configs_maps_raw() {
-    sed -n '/^# BEGIN_MAPS$/,/^# END_MAPS$/{/^# BEGIN_MAPS$/d;/^# END_MAPS$/d;p}' "$_SCRIPT"
-}
+def serialize_paths(abs_dest, abs_src):
+    """Convert absolute paths back into symbolic representations containing $CONFIGS_DIR token flags."""
+    home_str = str(Path.home())
+    configs_str = str(CONFIGS_DIR)
 
-# Emit resolved pairs: src_rel|/expanded/dest
-_configs_maps() {
-    while IFS='|' read -r src_rel dest_raw; do
-        [[ -z "$src_rel" ]] && continue
-        printf '%s|%s\n' "$src_rel" "${dest_raw/\$HOME/$HOME}"
-    done < <(_configs_maps_raw)
-}
+    raw_dest = str(abs_dest).replace(home_str, "$HOME")
 
-# Add an entry to the MAPS block (idempotent; stores $HOME symbolically).
-_configs_map_add() {
-    local src_rel="$1"
-    local dest="$2"
-    local dest_raw="${dest/$HOME/\$HOME}"
-    local entry="${src_rel}|${dest_raw}"
+    # Force prefix assignment matching repository tracking variables
+    if str(abs_src).startswith(configs_str):
+        raw_src = str(abs_src).replace(configs_str, "$CONFIGS_DIR")
+    else:
+        raw_src = str(abs_src).replace(home_str, "$HOME")
 
-    if _configs_maps_raw | grep -qxF "$entry"; then
-        return 0  # already tracked
-    fi
+    return raw_dest, raw_src
 
-    local tmp
-    tmp="$(mktemp)"
-    awk -v e="$entry" '/^# END_MAPS$/ { print e } { print }' "$_SCRIPT" > "$tmp"
-    chmod +x "$tmp"
-    mv "$tmp" "$_SCRIPT"
-    echo "   ➜ Added to MAPS: $entry"
-}
+# ── Dynamic Target Map Resolution Core ──────────────────────────────────────────
+def resolve_mapping_file(cmd, passed_args):
+    """Determine mapping file path via positional overrides or fallback hostname auto-detection."""
+    # Slicing bounds change based on command structure requirements
+    param_offset = 3 if cmd in ("link",) else (2 if cmd in ("unlink",) else 1)
 
-# Remove entries whose dest matches $1 from the MAPS block.
-_configs_map_remove() {
-    local dest="$1"
-    local dest_raw="${dest/$HOME/\$HOME}"
+    if len(passed_args) > param_offset:
+        explicit_path = Path(passed_args[param_offset]).expanduser()
+        if explicit_path.is_file():
+            return explicit_path.absolute()
+        elif explicit_path.is_dir() and (explicit_path / "configs_map.cfg").is_file():
+            return (explicit_path / "configs_map.cfg").absolute()
 
-    if ! _configs_maps_raw | grep -qF "|${dest_raw}"; then
-        return 0  # not tracked, nothing to do
-    fi
+    # Contextual Auto-Detection Mode: Fallback lookup using active machine hostname
+    current_host = socket.gethostname()
+    host_map_path = CONFIGS_DIR / "hosts" / current_host / "configs_map.cfg"
 
-    local tmp
-    tmp="$(mktemp)"
-    awk -v d="|${dest_raw}" 'index($0, d) && /^[^#]/ { next } { print }' "$_SCRIPT" > "$tmp"
-    chmod +x "$tmp"
-    mv "$tmp" "$_SCRIPT"
-    echo "   ➜ Removed from MAPS: $dest_raw"
-}
+    # Run absolute resolution safely to bypass relative symlink paths
+    return host_map_path.absolute()
 
-# ── Link helpers ──────────────────────────────────────────────────────────────
+# ── Database Operations ────────────────────────────────────────────────────────
+def load_maps(map_file: Path):
+    """Load config mappings safely using standard python configparser engine."""
+    ensure_env(map_file)
+    config = configparser.ConfigParser(interpolation=None)
+    config.optionxform = str  # Maintain strict case sensitivity
+    try:
+        config.read(map_file)
+    except configparser.Error as e:
+        print(f"❌ Error: Database config layout parsing failed at {map_file}. Error: {e}")
+        sys.exit(1)
+    return config
 
-_configs_link_file() {
-    local src="$1"
-    local dest="$2"
-    local backup="${dest}.backup"
+def map_add(abs_dest, abs_src, map_file: Path):
+    """Idempotently add a mapping rule directly to the configuration data file."""
+    config = load_maps(map_file)
+    raw_dest, raw_src = serialize_paths(abs_dest, abs_src)
 
-    # Already correct — nothing to do.
-    if [[ -L "$dest" && "$(readlink "$dest")" == "$src" ]]; then
-        return 0
-    fi
+    if config.has_option("mappings", raw_dest):
+        print(f"☑️  Already tracked in configuration file: {raw_dest}")
+        return
 
-    # Repo source must exist before we try to link it.
-    if [[ ! -e "$src" ]]; then
-        echo "⚠️  Skipping $dest — repo source missing: $src"
-        return 1
-    fi
+    try:
+        if not config.has_section("mappings"):
+            config.add_section("mappings")
+        config.set("mappings", raw_dest, raw_src)
+        with open(map_file, 'w') as f:
+            config.write(f)
+        print(f"💾 Database: Appended raw mapping entry to {map_file}")
+        print(f"   ↳ Target: {raw_dest}\n   ↳ Source: {raw_src}")
+    except IOError as e:
+        print(f"❌ Error: Failed to write entry to configuration mapping file. Error: {e}")
 
-    # Real file at destination (not yet a symlink).
-    if [[ -e "$dest" && ! -L "$dest" ]]; then
-        echo "⚠️  Conflict at $dest"
+def map_remove(abs_dest, map_file: Path):
+    """Excise an existing tracking configuration entry entirely safely."""
+    config = load_maps(map_file)
+    raw_dest, _ = serialize_paths(abs_dest, Path.home())
 
-        if diff -q "$src" "$dest" >/dev/null 2>&1; then
-            echo "   ➜ Identical to repo. Converting to symlink..."
-            mv "$dest" "$backup"
-        else
-            echo "   ❗ Differs from repo. Launching interactive merge (sdiff)..."
-            echo "      l = keep repo · r = keep local · eb = edit both"
-            echo "   ──────────────────────────────────────────────────────"
+    if not config.has_option("mappings", raw_dest):
+        print(f"ℹ️  Database: [{raw_dest}] is not tracked in {map_file.name}, nothing to clear.")
+        return
 
-            local tmp_merge
-            tmp_merge="$(mktemp)"
-            cp "$src" "${src}.orig"   # protect original repo file
+    try:
+        config.remove_option("mappings", raw_dest)
+        with open(map_file, 'w') as f:
+            config.write(f)
+        print(f"🗑️  Database: Removed entry [{raw_dest}] from {map_file}")
+    except IOError as e:
+        print(f"❌ Error: Failed to drop entry from configuration mapping file. Error: {e}")
 
-            if sdiff -s -o "$tmp_merge" "$src" "$dest"; then
-                mv "$tmp_merge" "$src"
-                echo "   ➜ Repo file updated with merged result."
-                echo "   ➜ Pre-merge repo copy saved to ${src}.orig"
-            else
-                echo "   ➜ Merge cancelled. Repo file unchanged."
-                rm -f "$tmp_merge" "${src}.orig"
-            fi
+# ── Link Lifecycle Helpers ─────────────────────────────────────────────────────
+def link_file(abs_dest, abs_src):
+    """Process file syncing, check for updates, handle interactive sdiff merges safely."""
+    backup = Path(f"{abs_dest}.backup")
 
-            mv "$dest" "$backup"
-            echo "   ➜ Local file backed up to $backup"
-        fi
-    fi
+    # Resolve target paths directly to handle underlying target matches accurately
+    if abs_dest.is_symlink():
+        try:
+            current_target = abs_dest.readlink()
+            if Path(current_target).absolute() == abs_src:
+                print(f"✨ Intact: {abs_dest} -> {abs_src}")
+                return True
+        except OSError:
+            pass
 
-    mkdir -p "$(dirname "$dest")"
-    [[ -L "$dest" ]] && rm "$dest"
-    ln -s "$src" "$dest"
-    echo "✅ Linked: $dest"
-}
+    if not abs_src.exists():
+        print(f"❌ Error: Cannot link target. Repo source path does not exist!\n   ↳ Missing: {abs_src}")
+        return False
 
-_configs_restore_file() {
-    local dest="$1"
-    local backup="${dest}.backup"
+    # Physical unlinked item conflict management
+    if abs_dest.exists() and not abs_dest.is_symlink():
+        print(f"⚠️  Conflict detected at destination: {abs_dest}")
 
-    if [[ -L "$dest" && -f "$backup" ]]; then
-        rm "$dest"
-        mv "$backup" "$dest"
-        echo "⏪ Restored backup: $dest"
-    elif [[ -f "$backup" ]]; then
-        mv "$backup" "$dest"
-        echo "⏪ Restored backup (no active link): $dest"
-    elif [[ -L "$dest" ]]; then
-        rm "$dest"
-        echo "🗑️  Removed dangling link: $dest"
-    else
-        echo "   ➜ Nothing to restore for $dest"
-    fi
-}
+        try:
+            diff_res = subprocess.run(["diff", "-q", str(abs_src), str(abs_dest)], capture_output=True)
+            if diff_res.returncode == 0:
+                print(f"   ➜ Contents are identical. Backing up local asset to: {backup}")
+                if backup.exists() or backup.is_symlink():
+                    if backup.is_dir() and not backup.is_symlink():
+                        shutil.rmtree(backup)
+                    else:
+                        backup.unlink()
+                shutil.move(abs_dest, backup)
+            else:
+                print("   ❗ Contents differ from repo asset. Launching interactive merge...")
+                print("   " + "─" * 80)
+                print("   Instructions: l = keep repo · r = keep local · eb = edit both")
+                print("   " + "─" * 80)
 
-# ── Commands ──────────────────────────────────────────────────────────────────
+                tmp_merge = subprocess.check_output(["mktemp"]).decode().strip()
+                orig_backup = Path(f"{abs_src}.orig")
+                shutil.copy(abs_src, orig_backup)
+                print(f"   📦 Backup: Created temporary pre-merge safe copy at {orig_backup}")
 
-repo_dir="$_CONFIGS_DIR"
-cmd="${1:-}"
+                merge_success = False
+                try:
+                    print("   ❗ Launching native terminal merge session...")
+                    status = os.system(f"sdiff -s -o '{tmp_merge}' '{abs_src}' '{abs_dest}'")
+                    exit_code = os.WEXITSTATUS(status) if hasattr(os, "WEXITSTATUS") else status
 
-case "$cmd" in
+                    if exit_code in (0, 1) and os.path.exists(tmp_merge) and os.path.getsize(tmp_merge) > 0:
+                        shutil.move(tmp_merge, abs_src)
+                        print(f"   ✅ Success: Merged results successfully written into repo file:\n      ↳ {abs_src}")
+                        merge_success = True
+                    else:
+                        print("   ❌ Warning: Merge session cancelled, exited, or empty. Repo asset untouched.")
+                        if os.path.exists(tmp_merge): os.remove(tmp_merge)
+                except Exception as merge_err:
+                    print(f"   ❌ Warning: Structural merge execution failed. Error: {merge_err}")
+                    if os.path.exists(tmp_merge): os.remove(tmp_merge)
 
-    ""|"help")
-        cat <<USAGE
-configs — Dotfile manager backed by a git repository
+                # Evaluate state before touching system files
+                if merge_success:
+                    print(f"   ➜ Moving existing local unlinked asset to backup destination:\n      ↳ {backup}")
+                    if backup.exists() or backup.is_symlink():
+                        if backup.is_dir() and not backup.is_symlink():
+                            shutil.rmtree(backup)
+                        else:
+                            backup.unlink()
+                    shutil.move(abs_dest, backup)
+                else:
+                    print("   ❌ Aborting execution loop branch to protect unmerged local state settings.")
+                    if orig_backup.exists(): orig_backup.unlink()
+                    return False
+        except (IOError, OSError, subprocess.SubprocessError) as fs_err:
+            print(f"❌ Error: Environment conflict resolution failure. Trace: {fs_err}")
+            return False
+
+    try:
+        abs_dest.parent.mkdir(parents=True, exist_ok=True)
+        if abs_dest.is_symlink() or abs_dest.exists():
+            abs_dest.unlink()
+
+        abs_dest.symlink_to(abs_src)
+        print(f"🔗 Symlink Created:\n   ↳ Target Link: {abs_dest}\n   ↳ Points To  : {abs_src}")
+        return True
+    except (IOError, OSError) as link_err:
+        print(f"❌ Error: Failed to generate symbolic target linkage. Error: {link_err}")
+        return False
+
+def restore_file(abs_dest):
+    """Safely return configuration states to system defaults by stripping out active links."""
+    backup = Path(f"{abs_dest}.backup")
+    try:
+        if abs_dest.is_symlink():
+            abs_src = abs_dest.readlink().absolute()
+            abs_dest.unlink()
+            print(f"   🗑️  Destroyed active symbolic link at {abs_dest}")
+
+            if backup.is_file() or backup.is_dir():
+                shutil.move(backup, abs_dest)
+                print(f"   ⏪ Backup Swapped: Reconstituted local configuration using backup:\n      ↳ {abs_dest}")
+            elif abs_src.is_file() or abs_src.is_dir():
+                if abs_src.is_dir():
+                    shutil.copytree(abs_src, abs_dest)
+                else:
+                    shutil.copy(abs_src, abs_dest)
+                print(f"   ⏪ Fallback Copy: No backup found. Cloned asset copy out of repository:\n      ↳ {abs_dest}")
+        elif backup.is_file() or backup.is_dir():
+            shutil.move(backup, abs_dest)
+            print(f"   ⏪ Restored: Found orphaned backup file/folder. Swapped back to [{abs_dest}]")
+        else:
+            print(f"   ℹ️  Skip: Path [{abs_dest}] is not an active symlink and no backup exists.")
+    except (IOError, OSError) as e:
+        print(f"❌ Error: System path restoration fault encountered for reference target {abs_dest}. Error: {e}")
+
+# ── App Execution Orchestrator Commands ─────────────────────────────────────────
+def main():
+    args = sys.argv[1:]
+    cmd = args[0] if args else "help"
+
+    if cmd in ("help", "--help", "-h"):
+        print("""configs — configuration manager backed by host profiles (Python Core)
 
 Commands:
-  link <repo_rel_path> <target_path>   Track and link a single file
-  link-all                             Link all files in MAPS
-  unlink <target_path>                 Break link, restore backup, remove from MAPS
-  unlink-all                           Restore all backups and remove all links
-  status                               Show link status of all tracked files
-  update                               Pull latest changes (clone if missing)
-  <git commands>                       Forwarded directly to the repo
+  init-host                                 Auto-detect host and bootstrap tracking files using master example
+  link <repo_path> <target_path> [map_path] Track and link a single asset
+  link-all [map_path]                       Link all assets found in host map context
+  unlink <target_path> [map_path]           Break link, restore backup, untrack
+  unlink-all [map_path]                     Restore all backups and remove links
+  list [map_path]                           Show detailed status of all tracked files
+  update                                    Pull latest repository changes
+  <git commands>                            Forwarded directly to the repo""")
+        return
 
-USAGE
-        ;;
+    if cmd == "init-host":
+        current_host = socket.gethostname()
+        host_dir = CONFIGS_DIR / "hosts" / current_host
+        map_file = host_dir / "configs_map.cfg"
+        org_file = host_dir / "readme.org"
+        example_source = CONFIGS_DIR / "hosts" / "example-host.org"
 
-    "link-all")
-        echo "🔗 Syncing all symlinks..."
-        while IFS='|' read -r src_rel dest; do
-            _configs_link_file "$repo_dir/$src_rel" "$dest"
-        done < <(_configs_maps)
-        ;;
+        print(f"🎬 Bootstrapping infrastructure profile for system host: [{current_host}]")
 
-    "unlink-all")
-        echo "🔓 Removing all symlinks and restoring backups..."
-        while IFS='|' read -r src_rel dest; do
-            _configs_restore_file "$dest"
-        done < <(_configs_maps)
-        ;;
+        try:
+            host_dir.mkdir(parents=True, exist_ok=True)
 
-    "link")
-        if [[ -z "${2:-}" || -z "${3:-}" ]]; then
-            echo "Usage: configs link <repo_relative_path> <target_absolute_path>"
-            exit 1
-        fi
-        src="$repo_dir/$2"
-        dest="$3"
+            # Initialize configs_map.cfg securely
+            if not map_file.exists():
+                with open(map_file, 'w') as f:
+                    f.write("[mappings]\n")
+                print(f"   💾 Created structural mapping index file: hosts/{current_host}/configs_map.cfg")
+            else:
+                print(f"   ⚠️  Skipping index creation: hosts/{current_host}/configs_map.cfg already exists.")
 
-        # Absorb a local-only file into the repo before linking.
-        if [[ -f "$dest" && ! -L "$dest" && ! -f "$src" ]]; then
-            mkdir -p "$(dirname "$src")"
-            cp "$dest" "$src"
-            echo "➜ Imported into repo: $2"
-        fi
+            # Copy template file directly from hosts/example-host.org without code block templates
+            if not org_file.exists():
+                if example_source.is_file():
+                    shutil.copy(example_source, org_file)
+                    print(f"   📝 Cloned playbook from example blueprint: hosts/{current_host}/{current_host}.org")
+                else:
+                    print(f"   ⚠️  Notice: Custom baseline reference playbook layout not found at {example_source.name}.")
+                    print(f"      Creating empty documentation placeholder at target path.")
+                    with open(org_file, 'w') as f:
+                        f.write(f"* {current_host.upper()} Configuration Document\n")
+            else:
+                print(f"   ⚠️  Skipping playbook creation: hosts/{current_host}/{current_host}.org already exists.")
 
-        _configs_link_file "$src" "$dest"
-        _configs_map_add "$2" "$dest"
-        ;;
+            print(f"✅ Host configuration files successfully generated for entry environment: hosts/{current_host}/")
+        except IOError as e:
+            print(f"❌ Error: Failed to write configuration workspace files securely. Error: {e}")
+            sys.exit(1)
 
-    "unlink")
-        if [[ -z "${2:-}" ]]; then
-            echo "Usage: configs unlink <target_absolute_path>"
-            exit 1
-        fi
-        dest="$2"
-        backup="${dest}.backup"
+    elif cmd in ("link-all", "unlink-all", "link", "unlink", "list"):
+        # Resolve target host configuration mapping block seamlessly
+        map_file = resolve_mapping_file(cmd, args)
 
-        if [[ -L "$dest" ]]; then
-            src="$(readlink "$dest")"
-            rm "$dest"
-            if [[ -f "$backup" ]]; then
-                mv "$backup" "$dest"
-                echo "⏪ Link broken. Restored local backup."
-            elif [[ -f "$src" ]]; then
-                cp "$src" "$dest"
-                echo "⏪ Link broken. Copied repo file to $dest."
-            fi
-        else
-            echo "➜ $dest is not an active symlink."
-        fi
+        if not map_file.exists() and cmd in ("link-all", "unlink-all", "list"):
+            print(f"❌ Error: Missing configuration target file context layout profiles.")
+            print(f"   ↳ Expected: {map_file}")
+            print(f"💡 Hint: Run 'configs init-host' to initialize this profile first.")
+            sys.exit(1)
 
-        _configs_map_remove "$dest"
-        ;;
+        print(f"⚙️  Active Profile Manifest: {map_file}")
 
-    "status")
-        printf "%-55s %s\n" "TARGET" "STATUS"
-        printf "%-55s %s\n" \
-            "───────────────────────────────────────────────────────" \
-            "──────────────────────"
-        while IFS='|' read -r src_rel dest; do
-            local_src="$repo_dir/$src_rel"
-            if [[ -L "$dest" && "$(readlink "$dest")" == "$local_src" ]]; then
-                status="✅ linked"
-            elif [[ -L "$dest" ]]; then
-                status="⚠️  links elsewhere"
-            elif [[ -f "$dest" ]]; then
-                status="📄 unlinked (file exists)"
-            else
-                status="❌ missing"
-            fi
-            printf "%-55s %s\n" "$dest" "$status"
-        done < <(_configs_maps)
-        ;;
+        if cmd == "link-all":
+            config = load_maps(map_file)
+            if config.has_section("mappings"):
+                for raw_dest, raw_src in config.items("mappings"):
+                    print("─" * 80)
+                    abs_dest, abs_src = expand_paths(raw_dest, raw_src)
+                    link_file(abs_dest, abs_src)
 
-    "update")
-        if [[ -d "$repo_dir/.git" ]]; then
-            echo "➜ Pulling latest changes (rebase + autostash)..."
-            git -C "$repo_dir" pull --rebase --autostash
-        else
-            echo "➜ Repo not found. Cloning..."
-            mkdir -p "$repo_dir"
-            git clone "$_CONFIGS_REPO_URL" "$repo_dir"
-        fi
-        ;;
+        elif cmd == "unlink-all":
+            print("🔓 Tearing down active environments and restoring file backups...")
+            config = load_maps(map_file)
+            if config.has_section("mappings"):
+                for raw_dest, _ in config.items("mappings"):
+                    abs_dest, _ = expand_paths(raw_dest, "$HOME")
+                    print("─" * 80)
+                    try:
+                        map_remove(abs_dest, map_file)
+                        restore_file(abs_dest)
+                    except Exception as e:
+                        print(f"❌ Error: Failed processing teardown on bulk item loop branch: {e}")
 
-    *)
-        git -C "$repo_dir" "$@"
-        ;;
+        elif cmd == "link":
+            # Account for the shifting parameter sizes when mixing standard calls and custom map overrides
+            if len(args) < 3:
+                print("Usage: configs link <repo_path> <target_path> [map_file_path]")
+                sys.exit(1)
 
-esac
+            raw_src = Path(args[1]).expanduser()
+            raw_dest = Path(args[2]).expanduser()
+
+            abs_src = raw_src.parent.resolve() / raw_src.name
+            abs_dest = raw_dest.parent.resolve() / raw_dest.name
+
+            if abs_dest.is_symlink():
+                try:
+                    current_target = abs_dest.readlink().absolute()
+                    if current_target == abs_src:
+                        print(f"✨ Intact: {abs_dest} is already linked cleanly to {abs_src}")
+                        map_add(abs_dest, abs_src, map_file)
+                        return
+                except OSError:
+                    pass
+
+            print(f"🎬 Registering link process...\n   ↳ Real Repo Path: {abs_src}\n   ↳ Real Home Path: {abs_dest}")
+
+            if abs_dest.exists() and not abs_dest.is_symlink() and not abs_src.exists():
+                print("📥 Importing local untracked configuration into repository workspace...")
+                try:
+                    abs_src.parent.mkdir(parents=True, exist_ok=True)
+                    if abs_dest.is_dir():
+                        shutil.copytree(abs_dest, abs_src)
+                    else:
+                        shutil.copy(abs_dest, abs_src)
+                    print(f"   ↳ Copied local configuration configurations to: {abs_src}")
+                except (IOError, OSError) as e:
+                    print(f"❌ Error: Failed to import asset into tracking workspace repository. Trace: {e}")
+                    sys.exit(1)
+
+            if link_file(abs_dest, abs_src):
+                map_add(abs_dest, abs_src, map_file)
+
+        elif cmd == "unlink":
+            if len(args) < 2:
+                print("Usage: configs unlink <target_path> [map_file_path]")
+                sys.exit(1)
+
+            raw_dest = Path(args[1]).expanduser()
+            abs_dest = raw_dest.parent.resolve() / raw_dest.name
+
+            print(f"🎬 Executing teardown sequence for path: {abs_dest}")
+
+            try:
+                map_remove(abs_dest, map_file)
+                restore_file(abs_dest)
+                print(f"✅ Success: Fully untracked and restored {abs_dest}")
+            except Exception as e:
+                print(f"❌ Error: Catastrophic failure during teardown sequence. Trace: {e}")
+                sys.exit(1)
+
+        elif cmd == "list":
+            config = load_maps(map_file)
+            c_ok, c_diff, c_miss, c_total = 0, 0, 0, 0
+
+            print(f"\n{'TARGET EXPANSION ($HOME)':<50} ➡️  {'REPO SOURCE PATH':<50}")
+            print("─" * 120)
+
+            if config.has_section("mappings"):
+                for raw_dest, raw_src in sorted(config.items("mappings")):
+                    c_total += 1
+                    abs_dest, abs_src = expand_paths(raw_dest, raw_src)
+
+                    is_link = abs_dest.is_symlink()
+                    if is_link:
+                        try:
+                            link_target = abs_dest.readlink().absolute()
+                            if link_target == abs_src:
+                                status = "✅ LINKED"
+                                c_ok += 1
+                            else:
+                                status = "⚠️  MISLINKED"
+                                c_diff += 1
+                        except OSError:
+                            status = "⚠️  BROKEN LINK"
+                            c_diff += 1
+                    elif abs_dest.exists():
+                        status = f"📄 UNLINKED ({'DIR' if abs_dest.is_dir() else 'FILE'})"
+                        c_diff += 1
+                    else:
+                        status = "❌ MISSING"
+                        c_miss += 1
+
+                    print(f"{raw_dest:<50}     {raw_src:<50} [{status}]")
+
+            print("─" * 120)
+            print(f"📊 METRICS SUMMARY: Total Tracked: {c_total}  |  Healthy: {c_ok}  |  Conflicts/Unlinked: {c_diff}  |  Missing: {c_miss}\n")
+
+    elif cmd == "update":
+        git_dir = CONFIGS_DIR / ".git"
+        try:
+            if git_dir.is_dir():
+                print(f"🔄 Repository exists. Enforcing SSH Remote URL structure...")
+                subprocess.run(["git", "-C", str(CONFIGS_DIR), "remote", "set-url", "origin", CONFIGS_REPO_URL], check=True)
+
+                print(f"📥 Pulling latest upstream code modifications...\n   ↳ Target: {CONFIGS_DIR}")
+                subprocess.run(["git", "-C", str(CONFIGS_DIR), "pull", "--rebase", "--autostash"], check=True)
+            else:
+                print(f"✨ Target directory is untracked. Checking remote repository connection...")
+                clone_res = subprocess.run(["git", "clone", CONFIGS_REPO_URL, str(CONFIGS_DIR)])
+
+                if clone_res.returncode != 0:
+                    print("⚠️  Upstream repository cloning failed (does not exist or unauthorized).")
+                    print(f"🔧 Creating a brand new local repository context at {CONFIGS_DIR}...")
+                    CONFIGS_DIR.mkdir(parents=True, exist_ok=True)
+                    subprocess.run(["git", "init", str(CONFIGS_DIR)], check=True)
+                    subprocess.run(["git", "-C", str(CONFIGS_DIR), "remote", "add", "origin", CONFIGS_REPO_URL], check=True)
+                    print(f"✅ Repository initialized locally with origin configured to: {CONFIGS_REPO_URL}")
+        except subprocess.CalledProcessError as git_err:
+            print(f"❌ Error: Git execution management runtime error: {git_err}")
+
+    else:
+        # Pass everything else directly to standard Git execution context
+        print("🔀 Command not captured by internal configs layer. Forwarding command straight to Git engine...")
+        try:
+            subprocess.run(["git", "-C", str(CONFIGS_DIR)] + args, check=True)
+        except subprocess.CalledProcessError as e:
+            sys.exit(e.returncode)
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\n❌ Execution interrupted by user request.")
+        sys.exit(130)

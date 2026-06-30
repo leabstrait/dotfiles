@@ -26,4 +26,4 @@ set enable-bracketed-paste on      # Prevent auto-execution on paste
 set echo-control-characters on     # Show control characters
 
 # Miscellaneous enhancements
-set expand-tilde on                # Expand tilde to home dir
+#set expand-tilde on                # Expand tilde to home dir
