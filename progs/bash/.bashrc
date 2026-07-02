@@ -84,12 +84,6 @@ alias diff="diff --color=auto"
 # grep with color
 alias grep="grep --color=auto"
 
-
-# NVM - Node Version Manager
-
-source /usr/share/nvm/init-nvm.sh
-
-
 # Package manager
 
 # alias to generate and save mirrorlist for pacman
