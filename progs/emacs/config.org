@@ -412,10 +412,6 @@
   (global-set-key (kbd "C-S-f") 'project-find-file)
   (global-set-key (kbd "C-S-g") 'project-find-regexp)
 
-(setq compilation-buffer-name-function
-      (lambda (name-of-mode)
-        (generate-new-buffer-name (concat "*" (downcase name-of-mode) "*"))))
-
   #+END_SRC
 
 ** 6.4. Shell & Native Compilation Color Enhancements
