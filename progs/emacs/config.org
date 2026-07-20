@@ -30,7 +30,7 @@
   3. *Major Mode Maps*: File-type specific configurations (e.g., `python-mode`, `js-mode`). Pressing ~TAB~ in Python indents by 4 spaces, while in web-mode it might indent by 2.
   4. *Global Map*: The catch-all baseline map. If a key isn't claimed by a major or minor mode, Emacs looks here (e.g., your custom ~C-z~ undo configurations).
 
-  #+BEGIN_SRC elisp
+  #+BEGIN_SRC elisp :tangle no
     (add-to-list 'load-path "~/.emacs.d/elpa/highlight-indent-guides-20260202.1243/")
     (require 'highlight-indent-guides)
     (setq highlight-indent-guides-method 'character)
@@ -48,11 +48,7 @@
 * 1. CORE ARCHITECTURE & SYSTEM ENVIRONMENT
 
 **** 1.1. Editor Diagnostics & Optimization
-***** 1.1.1. Native Compilation Warnings
-  Inhibit native compilation warning buffers from popping up asynchronously over our workspaces.
-  #+BEGIN_SRC elisp
-  (setq native-comp-async-report-warnings-errors 'silent)
-  #+END_SRC
+
 
 **** 1.2. Graphical Canvas & Frame Configurations
 ***** 1.2.1. Basic Window Geometry & Universal Overrides
@@ -69,21 +65,20 @@
 
 ***** 1.2.2. Frame Indicators & Decorative Overlays
   #+BEGIN_SRC elisp
-  (column-number-mode t)
-  (display-battery-mode t)
-  (display-time-mode t)
-  (size-indication-mode t)
-  (tab-bar-mode t)
+    (column-number-mode t)
+    (display-battery-mode t)
+    (display-time-mode t)
+    (size-indication-mode t)
+    (tab-bar-mode t)
 
-  (setq indicate-empty-lines t)
-  (setq indicate-buffer-boundaries '((top . left) (bottom . left) (up . left) (down . left)))
+    (setq indicate-empty-lines t)
+    (setq indicate-buffer-boundaries '((top . left) (bottom . left) (up . left) (down . left)))
   #+END_SRC
 
 ***** 1.2.3. Typography & Font Specifications
   Configures **NotoSansM Nerd Font Mono** at a compact, precise size (95/10pt) matching standard terminal system settings.
   #+BEGIN_SRC elisp
   (set-frame-font "NotoSansM Nerd Font Mono-11" nil t)
-  (setq font-use-system-font t)
   #+END_SRC
 
 **** 1.3. Global Text Formatting & Indentation Defaults
@@ -182,21 +177,27 @@
 * 3. INTERACTIVE SEARCH, NAVIGATION, & MINIBUFFER UTILITIES
 
 #+BEGIN_SRC elisp
-(defun ediff-clipboard-with-file (file-name)
-  "Compare a file with the contents of the system clipboard using ediff."
-  (interactive "fSelect file to compare with clipboard: ")
-  (let ((clipboard-content (current-kill 0)))
-    (with-temp-buffer
-      (insert clipboard-content)
-      ;; Name the temp buffer so Ediff can label it
-      (rename-buffer "*clipboard-content*")
-      (ediff-buffers (current-buffer) file-name))))
+  (defun ediff-clipboard-with-file (file-name)
+    "Compare FILE-NAME with the clipboard."
+    (interactive "fCompare file with clipboard: ")
+    (let ((clip-buf (generate-new-buffer "*clipboard*")))
+      (with-current-buffer clip-buf
+        (insert (or (and (fboundp 'gui-get-selection)
+  		       (gui-get-selection 'CLIPBOARD))
+  		  (current-kill 0)))
+        (set-buffer-modified-p nil))
+      (let ((ediff-after-quit-hook-internal
+  	   (list (lambda ()
+  		   (when (buffer-live-p clip-buf)
+  		     (kill-buffer clip-buf))))))
+        (ediff-buffers clip-buf
+  		     (find-file-noselect file-name)))))
 
-;; Bind to a convenient key, e.g., C-c e c
-(global-set-key (kbd "C-c e c") 'ediff-clipboard-with-file)
+  ;; Bind to a convenient key, e.g., C-c e c
+  (global-set-key (kbd "C-c e c") 'ediff-clipboard-with-file)
 
-(setq ediff-split-window-function 'split-window-horizontally)
-(setq ediff-window-setup-function 'ediff-setup-windows-plain)
+  (setq ediff-split-window-function 'split-window-horizontally)
+  (setq ediff-window-setup-function 'ediff-setup-windows-plain)
 #+END_SRC
 
 ** 3.1. Helm Ecosystem Core
@@ -285,15 +286,15 @@
 #+BEGIN_SRC elisp
 (use-package yafolding
   :ensure t
-  :hook ((prog-mode . yafolding-mode)
-         (compilation-mode . yafolding-mode)))
+  :hook ((prog-mode . yafolding-mode)))
 #+END_SRC
 
 ---
 
 * 5. VERSATILE UTILITIES & VERSION CONTROL
 
-#+BEGIN_SRC elisp
+
+  #+BEGIN_SRC elisp
   (require 'yasnippet)
   (require 'yasnippet-snippets)
   (yas-reload-all)
@@ -381,44 +382,26 @@
         lsp-pylsp-plugins-pycodestyle-enabled nil))
 #+END_SRC
 
-*** 6.2.2. SCons Build Automation Submodes
-#+BEGIN_SRC elisp
-(setq compile-command "/usr/bin/python /usr/bin/scons")
-
-(define-derived-mode scons-mode python-mode "scons"
-  "A specialized submode derivative targeting SCons software building files.")
-
-(add-to-list 'auto-mode-alist '("SConstruct" . scons-mode))
-(add-to-list 'auto-mode-alist '("SConscript" . scons-mode))
-#+END_SRC
-
 *** 6.2.3. Web Development Layout Specifications (JS / HTML)
 #+BEGIN_SRC elisp
-(use-package js
-  :mode ("\\.js\\'" . js-mode)
-  :config
-  (setq js-indent-level 2))
-
-(add-to-list 'auto-mode-alist '("\\.mjs$" . js-mode))
-
-(use-package mhtml-mode
-  :mode ("\\.html?\\'" . mhtml-mode))
+(use-package web-mode
+  :mode ("\\.mjs\\'" . web-mode))
 #+END_SRC
 
 ** 6.3. Built-In Project Compilation Infrastructure
 #+BEGIN_SRC elisp
-  (global-set-key (kbd "C-<f9>") 'project-compile)
   (global-set-key (kbd "C-S-t") 'project-shell)
   (global-set-key (kbd "C-S-f") 'project-find-file)
   (global-set-key (kbd "C-S-g") 'project-find-regexp)
-
   #+END_SRC
+
 
 ** 6.4. Shell & Native Compilation Color Enhancements
 #+BEGIN_SRC elisp
-  (use-package ansi-color
-    :hook (compilation-filter . ansi-color-compilation-filter))
-#+END_SRC
+  (add-hook 'compilation-filter-hook 'ansi-color-compilation-filter)
+  (setq magit-process-apply-ansi-colors t)
+
+  #+END_SRC
 
 
 * Major Modes & File Types

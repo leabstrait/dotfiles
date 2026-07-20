@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+
 import os
 import sys
 import shutil
@@ -33,7 +34,6 @@ def serialize_paths(abs_dest, abs_src):
     """Convert absolute paths back into symbolic representations containing $CONFIGS_DIR token flags."""
     home_str = str(Path.home())
     configs_str = str(CONFIGS_DIR)
-
     raw_dest = str(abs_dest).replace(home_str, "$HOME")
 
     # Force prefix assignment matching repository tracking variables
@@ -230,13 +230,147 @@ def restore_file(abs_dest):
     except (IOError, OSError) as e:
         print(f"❌ Error: System path restoration fault encountered for reference target {abs_dest}. Error: {e}")
 
+def mkarch_build_iso(host, config, usb=None):
+    build_dir = Path.home() / f"archiso-{host}"
+    profile_dir = build_dir / "profile"
+    airootfs = profile_dir / "airootfs"
+
+    print("Checking for archiso environment dependency...")
+    subprocess.run(["sudo", "pacman", "-S", "--needed", "--noconfirm", "archiso"], check=True)
+
+    if build_dir.exists():
+        shutil.rmtree(build_dir)
+    build_dir.mkdir(parents=True, exist_ok=True)
+
+    print("Cloning base profile metadata...")
+    shutil.copytree("/usr/share/archiso/configs/releng", profile_dir, dirs_exist_ok=True)
+
+    # 1. Inject custom packages from [mkarch.packages]
+    if "mkarch.packages" in config:
+        pkgs = list(config["mkarch.packages"].keys())
+        if pkgs:
+            packages_file = profile_dir / "packages.x86_64"
+            with open(packages_file, "a") as f:
+                f.write("\n" + "\n".join(pkgs) + "\n")
+
+    # Target configuration folders inside ISO
+    networkd_dir = airootfs / "etc/systemd/network"
+    nm_dir = airootfs / "etc/NetworkManager/system-connections"
+    wants_dir = airootfs / "etc/systemd/system/multi-user.target.wants"
+
+    networkd_dir.mkdir(parents=True, exist_ok=True)
+    nm_dir.mkdir(parents=True, exist_ok=True)
+    wants_dir.mkdir(parents=True, exist_ok=True)
+
+    def enable_service(name):
+        target = wants_dir / name
+        source = Path(f"/usr/lib/systemd/system/{name}")
+        if target.exists() or target.is_symlink():
+            target.unlink()
+        target.symlink_to(source)
+
+    enable_networkd = False
+    enable_nm = False
+
+    # 2. Iterate and build individual network configurations
+    for section in config.sections():
+        if not section.startswith("mkarch.network."):
+            continue
+
+        # Extract net name (e.g. "office" or "home")
+        net_name = section.replace("mkarch.network.", "")
+        net_section = config[section]
+
+        net_type = net_section.get("type", "static").lower()
+        iface = net_section.get("interface", "en*")
+
+        if net_type == "dhcp":
+            print(f"Configuring DHCP via NetworkManager for profile: {net_name}")
+            enable_nm = True
+            conn_file = nm_dir / f"{net_name}.nmconnection"
+            conn_file.write_text(f"""[connection]
+id={net_name}
+type=ethernet
+interface-name={iface}
+
+[ethernet]
+
+[ipv4]
+method=auto
+
+[ipv6]
+method=auto
+""")
+            os.chmod(conn_file, 0o600)
+        else:
+            print(f"Configuring Static via systemd-networkd for profile: {net_name}")
+            enable_networkd = True
+            ip = net_section.get("ip")
+            gw = net_section.get("gateway")
+            dns = net_section.get("dns", "1.1.1.1")
+
+            if not ip or not gw:
+                print(f"Error: Static sub-profile [{section}] requires 'ip' and 'gateway'.")
+                sys.exit(1)
+
+            net_file = networkd_dir / f"10-{net_name}.network"
+            net_file.write_text(f"""[Match]
+Name={iface}
+
+[Network]
+Address={ip}
+Gateway={gw}
+DNS={dns}
+""")
+
+    # Symlink required daemons
+    if enable_networkd:
+        enable_service("systemd-networkd.service")
+        enable_service("systemd-resolved.service")
+    if enable_nm:
+        enable_service("NetworkManager.service")
+
+    # 3. Configure system hostname identity
+    hostname_dir = airootfs / "etc"
+    hostname_dir.mkdir(parents=True, exist_ok=True)
+    (hostname_dir / "hostname").write_text(f"{host}\n")
+
+    # 4. Generate build ISO
+    out_dir = build_dir / "out"
+    work_dir = build_dir / "work"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    print("Compiling customized ISO target via mkarchiso...")
+    subprocess.run([
+        "mkarchiso", "-v",
+        "-w", str(work_dir),
+        "-o", str(out_dir),
+        str(profile_dir)
+    ], check=True)
+
+    iso_path = next(out_dir.glob("*.iso"), None)
+    if not iso_path:
+        print("Error: Automated compilation target missing.")
+        sys.exit(1)
+    print(f"Success! Built target iso located at: {iso_path}")
+
+    # 5. Native hardware sync
+    if usb:
+        print(f"Deploying block layer payload directly onto {usb}...")
+        subprocess.run([
+            "sudo", "dd", f"if={iso_path}", f"of={usb}",
+            "bs=4M", "status=progress", "conv=fsync"
+        ], check=True)
+        print("Device image write complete.")
+
+
 # ── App Execution Orchestrator Commands ─────────────────────────────────────────
 def main():
     args = sys.argv[1:]
     cmd = args[0] if args else "help"
 
     if cmd in ("help", "--help", "-h"):
-        print("""configs — configuration manager backed by host profiles (Python Core)
+        print("""configs — configuration manager and archiso builder backed by host profiles (Python Core)
 
 Commands:
   init-host                                 Auto-detect host and bootstrap tracking files using master example
@@ -246,7 +380,23 @@ Commands:
   unlink-all [map_path]                     Restore all backups and remove links
   list [map_path]                           Show detailed status of all tracked files
   update                                    Pull latest repository changes
+  mkarch [target_usb] [map_path]            Build customized installation ISO using host mapping profiles
   <git commands>                            Forwarded directly to the repo""")
+        return
+
+
+    if cmd == "mkarch":
+        # Reads the active configs_map.cfg as the configuration engine for the ISO build
+        map_file = resolve_mapping_file(cmd, args)
+        if not map_file.exists():
+            print(f"\u274c Error: Map profile missing. Run 'configs init-host' first.")
+            sys.exit(1)
+
+        current_host = socket.gethostname()
+        config = load_maps(map_file)
+
+        usb_device = args[1] if len(args) > 1 else None
+        mkarch_build_iso(current_host, config, usb=usb_device)
         return
 
     if cmd == "init-host":
