@@ -2,8 +2,8 @@
 (setq truncate-lines t)
 
 ;; Explicitly enforce showing all elements from Options > Show/Hide
-(when (fboundp 'tool-bar-mode) (tool-bar-mode 1))
-(when (fboundp 'menu-bar-mode) (menu-bar-mode 1))
+(when (fboundp 'tool-bar-mode) (tool-bar-mode 0))
+(when (fboundp 'menu-bar-mode) (menu-bar-mode 0))
 (when (fboundp 'scroll-bar-mode) (scroll-bar-mode 0))
 
 (column-number-mode t)
@@ -12,10 +12,10 @@
 (size-indication-mode t)
 (tab-bar-mode t)
 
-(setq indicate-empty-lines t)
+;;(setq indicate-empty-lines t)
 (setq indicate-buffer-boundaries '((top . left) (bottom . left) (up . left) (down . left)))
 
-(set-frame-font "NotoSansM Nerd Font Mono-11" nil t)
+;;    (set-frame-font "NotoSansM Nerd Font Mono-11" nil t) ;
 
 (setq-default indent-tabs-mode nil)
 (setq-default tab-width 4)
@@ -69,6 +69,19 @@
 
 ;; Load the theme immediately as it comes from the factory
 (load-theme 'modus-vivendi t)
+
+(require 'winner)
+(winner-mode 1)
+
+(defun my/toggle-window-zoom ()
+  "Toggle between maximizing the current window and restoring the split layout."
+  (interactive)
+  (if (one-window-p)
+      (winner-undo)
+    (delete-other-windows)))
+
+;; Bind the toggle function to a convenient key combination
+(global-set-key (kbd "C-c z") 'my/toggle-window-zoom)
 
 (defun ediff-clipboard-with-file (file-name)
   "Compare FILE-NAME with the clipboard."
@@ -214,8 +227,195 @@
         lsp-pylsp-plugins-mccabe-enabled nil
         lsp-pylsp-plugins-pycodestyle-enabled nil))
 
-(use-package web-mode
-  :mode ("\\.mjs\\'" . web-mode))
+;;; doing expected things
+(delete-selection-mode 1)
+
+(add-to-list 'auto-mode-alist '("\\.mjs\\'" . js-ts-mode))
+
+;; 1. Define custom Flycheck checker for Biome
+(with-eval-after-load 'flycheck
+  (flycheck-define-checker javascript-biome
+    "A JavaScript/TypeScript syntax and style checker using Biome."
+    :command ("biome" "check" "--reporter=github" (eval (buffer-file-name)))
+    :error-patterns
+    ((error line-start "::error file=" (file-name) ",line=" line ",col=" column "::" (message) line-end)
+     (warning line-start "::warning file=" (file-name) ",line=" line ",col=" column "::" (message) line-end))
+    :modes (js-mode js-ts-mode typescript-mode typescript-ts-mode jsx-ts-mode tsx-ts-mode))
+
+  (add-to-list 'flycheck-checkers 'javascript-biome))
+
+;; 2. Safe Chaining: Set up ESLint -> Biome -> LSP after both packages load
+(defun my/configure-js-flycheck-chain ()
+  "Safely chain ESLint -> Biome -> LSP after all checkers exist."
+  (when (and (flycheck-checker-exists-p 'javascript-eslint)
+             (flycheck-checker-exists-p 'javascript-biome)
+             (flycheck-checker-exists-p 'lsp))
+    (flycheck-add-next-checker 'javascript-eslint 'javascript-biome)
+    (flycheck-add-next-checker 'javascript-biome 'lsp)))
+
+;; Run the chaining setup whenever lsp-diagnostics loads
+(with-eval-after-load 'lsp-diagnostics
+  (with-eval-after-load 'flycheck
+    (my/configure-js-flycheck-chain)))
+
+;; 3. Buffer setup hook
+(defun my/js-ts-mode-setup ()
+  "Setup Flycheck and force ESLint to run first."
+  (setq-local flycheck-checker 'javascript-eslint)
+  (flycheck-mode))
+
+(add-hook 'js-ts-mode-hook #'my/js-ts-mode-setup)
+(add-hook 'js-ts-mode-hook #'lsp)
+
+;; Enable LSP for CSS modes
+(add-hook 'css-mode-hook #'lsp)
+(add-hook 'css-ts-mode-hook #'lsp)
+
+;; =============================================================================
+;; 1. Built-in Dark Base Theme & Color Definitions
+;; =============================================================================
+
+;; Load built-in dark theme (modus-vivendi is built-in as of Emacs 28+)
+(load-theme 'modus-vivendi t)
+
+(defvar my/accent-primary   "#00adb5" "Primary active accent.")
+(defvar my/accent-muted     "#008389" "Muted accent for structural borders.")
+(defvar my/accent-bg-soft   "#1b4950" "Soft background tint for active selections.")
+(defvar my/dark-bg          "#1a1e24" "Base dark background.")
+(defvar my/panel-bg         "#222831" "Elevated surface/panel background.")
+(defvar my/text-bright      "#eeeeee" "High-contrast text.")
+
+(custom-set-faces
+ ;; Core Editor Faces
+ `(default ((t (:background ,my/dark-bg :foreground ,my/text-bright))))
+ `(cursor ((t (:background ,my/accent-primary))))
+ `(region ((t (:background ,my/accent-bg-soft :foreground ,my/text-bright))))
+ `(hl-line ((t (:background ,my/panel-bg))))
+ `(fringe ((t (:background ,my/dark-bg :foreground ,my/accent-muted))))
+ `(vertical-border ((t (:foreground ,my/accent-muted))))
+ `(minibuffer-prompt ((t (:foreground ,my/accent-primary :weight bold))))
+ `(link ((t (:foreground ,my/accent-primary :underline t))))
+
+ ;; Mode Line Focus
+ `(mode-line ((t (:background ,my/panel-bg :foreground ,my/accent-primary :box (:line-width 1 :color ,my/accent-primary)))))
+ `(mode-line-inactive ((t (:background ,my/dark-bg :foreground "#8f9ba8" :box (:line-width 1 :color "#2d3748")))))
+ `(mode-line-buffer-id ((t (:foreground ,my/accent-primary :weight bold))))
+
+ ;; Search
+ `(isearch ((t (:background ,my/accent-primary :foreground ,my/dark-bg :weight bold))))
+ `(lazy-highlight ((t (:background ,my/accent-bg-soft :foreground ,my/accent-primary)))))
+
+;; =============================================================================
+;; 2. Package-Specific Accent Integrations
+;; =============================================================================
+
+;; Helm & Helm-Core
+(with-eval-after-load 'helm
+  (custom-set-faces
+   `(helm-selection ((t (:background ,my/accent-bg-soft :foreground ,my/accent-primary :weight bold))))
+   `(helm-match ((t (:foreground ,my/accent-primary :weight bold))))
+   `(helm-source-header ((t (:background ,my/panel-bg :foreground ,my/accent-primary :weight bold :height 1.1))))
+   `(helm-header ((t (:background ,my/dark-bg :foreground ,my/accent-primary))))
+   `(helm-candidate-number ((t (:foreground ,my/accent-muted :weight bold))))
+   `(helm-separator ((t (:foreground ,my/accent-muted))))))
+
+;; Company
+(with-eval-after-load 'company
+  (custom-set-faces
+   `(company-tooltip-selection ((t (:background ,my/accent-bg-soft :foreground ,my/accent-primary :weight bold))))
+   `(company-tooltip-common ((t (:foreground ,my/accent-primary :weight bold))))
+   `(company-scrollbar-fg ((t (:background ,my/accent-primary))))
+   `(company-scrollbar-bg ((t (:background ,my/panel-bg))))))
+
+;; Magit & Magit-Todos
+(with-eval-after-load 'magit
+  (custom-set-faces
+   `(magit-section-heading ((t (:foreground ,my/accent-primary :weight bold))))
+   `(magit-branch-local ((t (:foreground ,my/accent-primary :weight bold))))
+   `(magit-branch-current ((t (:foreground ,my/accent-primary :box (:line-width 1 :color ,my/accent-primary)))))
+   `(magit-diff-hunk-heading ((t (:background ,my/panel-bg :foreground ,my/accent-primary))))
+   `(magit-diff-hunk-heading-highlight ((t (:background ,my/accent-bg-soft :foreground ,my/accent-primary))))))
+
+;; Flycheck
+(with-eval-after-load 'flycheck
+  (custom-set-faces
+   `(flycheck-fringe-warning ((t (:foreground ,my/accent-primary))))
+   `(flycheck-fringe-info ((t (:foreground ,my/accent-primary))))))
+
+;; LSP UI (Peak/Doc Popups)
+(with-eval-after-load 'lsp-ui
+  (custom-set-faces
+   `(lsp-ui-peek-header ((t (:background ,my/panel-bg :foreground ,my/accent-primary :weight bold))))
+   `(lsp-ui-peek-selection ((t (:background ,my/accent-bg-soft :foreground ,my/accent-primary))))
+   `(lsp-ui-peek-highlight ((t (:foreground ,my/accent-primary :weight bold))))
+   `(lsp-ui-doc-background ((t (:background ,my/panel-bg))))))
+
+;; Symbol-Overlay
+(with-eval-after-load 'symbol-overlay
+  (custom-set-faces
+   `(symbol-overlay-default-face ((t (:background ,my/accent-bg-soft :foreground ,my/accent-primary :weight bold))))))
+
+;; Hl-Todo
+(with-eval-after-load 'hl-todo
+  (add-to-list 'hl-todo-keyword-faces `("TODO" . ,my/accent-primary))
+  (add-to-list 'hl-todo-keyword-faces `("FIXME" . "#ff4500")))
+
+;; Posframe (Borders)
+(with-eval-after-load 'posframe
+  (custom-set-faces
+   `(posframe-border ((t (:background ,my/accent-primary))))))
+
+;; Web-Mode / Markdown-Mode
+(with-eval-after-load 'web-mode
+  (custom-set-faces
+   `(web-mode-html-tag-face ((t (:foreground ,my/accent-primary :weight bold))))
+   `(web-mode-html-attr-name-face ((t (:foreground "#4fc3f7"))))))
+
+(with-eval-after-load 'markdown-mode
+  (custom-set-faces
+   `(markdown-header-face-1 ((t (:foreground ,my/accent-primary :weight bold :height 1.2))))
+   `(markdown-header-face-2 ((t (:foreground "#38bdf8" :weight bold))))))
+
+(add-to-list 'auto-mode-alist '("\\.mjs\\'" . js-ts-mode))
+
+;; 1. Define custom Flycheck checker for Biome
+(with-eval-after-load 'flycheck
+  (flycheck-define-checker javascript-biome
+    "A JavaScript/TypeScript syntax and style checker using Biome."
+    :command ("biome" "check" "--reporter=github" (eval (buffer-file-name)))
+    :error-patterns
+    ((error line-start "::error file=" (file-name) ",line=" line ",col=" column "::" (message) line-end)
+     (warning line-start "::warning file=" (file-name) ",line=" line ",col=" column "::" (message) line-end))
+    :modes (js-mode js-ts-mode typescript-mode typescript-ts-mode jsx-ts-mode tsx-ts-mode))
+
+  (add-to-list 'flycheck-checkers 'javascript-biome))
+
+;; 2. Safe Chaining: Set up ESLint -> Biome -> LSP after both packages load
+(defun my/configure-js-flycheck-chain ()
+  "Safely chain ESLint -> Biome -> LSP after all checkers exist."
+  (when (and (flycheck-checker-exists-p 'javascript-eslint)
+             (flycheck-checker-exists-p 'javascript-biome)
+             (flycheck-checker-exists-p 'lsp))
+    (flycheck-add-next-checker 'javascript-eslint 'javascript-biome)
+    (flycheck-add-next-checker 'javascript-biome 'lsp)))
+
+;; Run the chaining setup whenever lsp-diagnostics loads
+(with-eval-after-load 'lsp-diagnostics
+  (with-eval-after-load 'flycheck
+    (my/configure-js-flycheck-chain)))
+
+;; 3. Buffer setup hook
+(defun my/js-ts-mode-setup ()
+  "Setup Flycheck and force ESLint to run first."
+  (setq-local flycheck-checker 'javascript-eslint)
+  (flycheck-mode))
+
+(add-hook 'js-ts-mode-hook #'my/js-ts-mode-setup)
+(add-hook 'js-ts-mode-hook #'lsp)
+
+;; Enable LSP for CSS modes
+(add-hook 'css-mode-hook #'lsp)
+(add-hook 'css-ts-mode-hook #'lsp)
 
 (global-set-key (kbd "C-S-t") 'project-shell)
 (global-set-key (kbd "C-S-f") 'project-find-file)
