@@ -1,3 +1,13 @@
+;; Automated Third-Party Package Cleanup
+(use-package no-littering
+  :ensure t
+  :config
+  ;; This automatically configures directories to ~/.emacs.d/var/ and etc/
+  (setq backup-directory-alist
+        `(("." . ,(expand-file-name "var/backup/" user-emacs-directory))))
+  (setq auto-save-file-name-transforms
+        `((".*" ,(expand-file-name "var/auto-save/" user-emacs-directory) t))))
+
 (setq-default toggle-truncate-lines t) ; Always truncate long lines
 (setq truncate-lines t)
 
@@ -21,7 +31,6 @@
 (setq-default tab-width 4)
 
 (global-display-line-numbers-mode 1)
-(setq display-line-numbers-type 'relative)
 
 ;; Disable line numbers in specific buffers where they don't make sense
 (dolist (mode '(term-mode-hook
@@ -70,7 +79,7 @@
 ;; Load the theme immediately as it comes from the factory
 (load-theme 'modus-vivendi t)
 
-(require 'winner)
+(use-package winner)
 (winner-mode 1)
 
 (defun my/toggle-window-zoom ()
@@ -89,15 +98,15 @@
   (let ((clip-buf (generate-new-buffer "*clipboard*")))
     (with-current-buffer clip-buf
       (insert (or (and (fboundp 'gui-get-selection)
-		       (gui-get-selection 'CLIPBOARD))
-		  (current-kill 0)))
+		               (gui-get-selection 'CLIPBOARD))
+		          (current-kill 0)))
       (set-buffer-modified-p nil))
     (let ((ediff-after-quit-hook-internal
-	   (list (lambda ()
-		   (when (buffer-live-p clip-buf)
-		     (kill-buffer clip-buf))))))
+	       (list (lambda ()
+		           (when (buffer-live-p clip-buf)
+		             (kill-buffer clip-buf))))))
       (ediff-buffers clip-buf
-		     (find-file-noselect file-name)))))
+		             (find-file-noselect file-name)))))
 
 ;; Bind to a convenient key, e.g., C-c e c
 (global-set-key (kbd "C-c e c") 'ediff-clipboard-with-file)
@@ -142,16 +151,6 @@
   (global-set-key (kbd "C-z") 'undo-only)
   (global-set-key (kbd "C-S-z") 'undo-tree-redo))
 
-(require 'symbol-overlay)
-
-(global-set-key
- (kbd "<C-mouse-3>")
- (lambda (event)
-   (interactive "e")
-   (save-excursion
-     (goto-char (posn-point (event-start event)))
-     (symbol-overlay-put))))
-
 (use-package expand-region
   :ensure t
   :bind (("C-S-SPC" . er/expand-region)
@@ -165,12 +164,6 @@
   :ensure t
   :hook ((prog-mode . yafolding-mode)))
 
-(require 'yasnippet)
-(require 'yasnippet-snippets)
-(yas-reload-all)
-(add-hook 'prog-mode-hook 'yas-minor-mode-on)
-(add-hook 'org-mode-hook 'yas-minor-mode-on)
-
 (use-package magit
   :commands magit-status
   :bind ("C-x g" . magit-status))
@@ -180,16 +173,15 @@
 (setq transient-default-level 7)
 
 (use-package org
-    :defer t
-    :config
-    (setq org-ellipsis " ▾"
-          org-hide-leading-stars t
-          org-log-done 'time))
+  :defer t
+  :config
+  (setq org-ellipsis " ▾"
+        org-hide-leading-stars t
+        org-log-done 'time))
 
 
 (setq org-adapt-indentation t) ; edit structure (indent content also)
 (setq org-support-shift-select t) ; enable text-selection when possible
-(add-hook 'org-mode-hook 'lambda() (require 'org-mouse))
 
 (use-package which-key
   :init
@@ -218,14 +210,16 @@
   (setq lsp-ui-doc-enable t
         lsp-ui-sideline-enable t))
 
+(add-hook 'python-mode-hook #'flycheck-mode)
 (use-package python
   :mode ("\\.py\\'" . python-mode)
   :config
-  (setq lsp-pylsp-plugins-ruff-enabled t
-        lsp-pylsp-plugins-pyright-enabled t
-        lsp-pylsp-plugins-flake8-enabled nil
-        lsp-pylsp-plugins-mccabe-enabled nil
-        lsp-pylsp-plugins-pycodestyle-enabled nil))
+  (setq
+   lsp-pylsp-plugins-ruff-enabled t
+   lsp-pylsp-plugins-pyright-enabled nil
+   lsp-pylsp-plugins-flake8-enabled nil
+   lsp-pylsp-plugins-mccabe-enabled nil
+   lsp-pylsp-plugins-pycodestyle-enabled nil))
 
 ;;; doing expected things
 (delete-selection-mode 1)
@@ -235,28 +229,18 @@
 ;; 1. Define custom Flycheck checker for Biome
 (with-eval-after-load 'flycheck
   (flycheck-define-checker javascript-biome
-    "A JavaScript/TypeScript syntax and style checker using Biome."
-    :command ("biome" "check" "--reporter=github" (eval (buffer-file-name)))
-    :error-patterns
-    ((error line-start "::error file=" (file-name) ",line=" line ",col=" column "::" (message) line-end)
-     (warning line-start "::warning file=" (file-name) ",line=" line ",col=" column "::" (message) line-end))
-    :modes (js-mode js-ts-mode typescript-mode typescript-ts-mode jsx-ts-mode tsx-ts-mode))
+                           "A JavaScript/TypeScript syntax and style checker using Biome."
+                           :command ("biome" "check" "--reporter=github" (eval (buffer-file-name)))
+                           :error-patterns
+                           ((error line-start "::error file=" (file-name) ",line=" line ",col=" column "::" (message) line-end)
+                            (warning line-start "::warning file=" (file-name) ",line=" line ",col=" column "::" (message) line-end))
+                           :modes (js-mode js-ts-mode typescript-mode typescript-ts-mode jsx-ts-mode tsx-ts-mode))
 
-  (add-to-list 'flycheck-checkers 'javascript-biome))
+  (add-to-list 'flycheck-checkers 'javascript-biome)
+  (flycheck-add-next-checker 'javascript-eslint 'javascript-biome)
+  )
 
-;; 2. Safe Chaining: Set up ESLint -> Biome -> LSP after both packages load
-(defun my/configure-js-flycheck-chain ()
-  "Safely chain ESLint -> Biome -> LSP after all checkers exist."
-  (when (and (flycheck-checker-exists-p 'javascript-eslint)
-             (flycheck-checker-exists-p 'javascript-biome)
-             (flycheck-checker-exists-p 'lsp))
-    (flycheck-add-next-checker 'javascript-eslint 'javascript-biome)
-    (flycheck-add-next-checker 'javascript-biome 'lsp)))
 
-;; Run the chaining setup whenever lsp-diagnostics loads
-(with-eval-after-load 'lsp-diagnostics
-  (with-eval-after-load 'flycheck
-    (my/configure-js-flycheck-chain)))
 
 ;; 3. Buffer setup hook
 (defun my/js-ts-mode-setup ()
@@ -376,46 +360,9 @@
    `(markdown-header-face-1 ((t (:foreground ,my/accent-primary :weight bold :height 1.2))))
    `(markdown-header-face-2 ((t (:foreground "#38bdf8" :weight bold))))))
 
-(add-to-list 'auto-mode-alist '("\\.mjs\\'" . js-ts-mode))
-
-;; 1. Define custom Flycheck checker for Biome
-(with-eval-after-load 'flycheck
-  (flycheck-define-checker javascript-biome
-    "A JavaScript/TypeScript syntax and style checker using Biome."
-    :command ("biome" "check" "--reporter=github" (eval (buffer-file-name)))
-    :error-patterns
-    ((error line-start "::error file=" (file-name) ",line=" line ",col=" column "::" (message) line-end)
-     (warning line-start "::warning file=" (file-name) ",line=" line ",col=" column "::" (message) line-end))
-    :modes (js-mode js-ts-mode typescript-mode typescript-ts-mode jsx-ts-mode tsx-ts-mode))
-
-  (add-to-list 'flycheck-checkers 'javascript-biome))
-
-;; 2. Safe Chaining: Set up ESLint -> Biome -> LSP after both packages load
-(defun my/configure-js-flycheck-chain ()
-  "Safely chain ESLint -> Biome -> LSP after all checkers exist."
-  (when (and (flycheck-checker-exists-p 'javascript-eslint)
-             (flycheck-checker-exists-p 'javascript-biome)
-             (flycheck-checker-exists-p 'lsp))
-    (flycheck-add-next-checker 'javascript-eslint 'javascript-biome)
-    (flycheck-add-next-checker 'javascript-biome 'lsp)))
-
-;; Run the chaining setup whenever lsp-diagnostics loads
-(with-eval-after-load 'lsp-diagnostics
-  (with-eval-after-load 'flycheck
-    (my/configure-js-flycheck-chain)))
-
-;; 3. Buffer setup hook
-(defun my/js-ts-mode-setup ()
-  "Setup Flycheck and force ESLint to run first."
-  (setq-local flycheck-checker 'javascript-eslint)
-  (flycheck-mode))
-
-(add-hook 'js-ts-mode-hook #'my/js-ts-mode-setup)
-(add-hook 'js-ts-mode-hook #'lsp)
-
-;; Enable LSP for CSS modes
-(add-hook 'css-mode-hook #'lsp)
-(add-hook 'css-ts-mode-hook #'lsp)
+(use-package indent-bars
+  :ensure t
+  :hook ((prog-mode yaml-mode conf-mode) . indent-bars-mode))
 
 (global-set-key (kbd "C-S-t") 'project-shell)
 (global-set-key (kbd "C-S-f") 'project-find-file)
@@ -425,19 +372,40 @@
 (setq magit-process-apply-ansi-colors t)
 
 (use-package vterm
+       :ensure t
+       :bind ("C-x t" . vterm)            ; Bind C-x t to launch vterm
+       :custom
+       (vterm-max-scrollback 10000)       ; Increase scrollback history limit
+       :config
+       ;; Automatically kill the vterm buffer when the shell process exits
+       (add-hook 'vterm-exit-functions
+                 (lambda (buf event)
+                   (let ((buffer-window (get-buffer-window buf)))
+                     (when buffer-window
+                       (delete-window buffer-window))
+                     (kill-buffer buf)))))
+
+
+     (use-package multi-vterm
+       :ensure t
+       :after vterm
+       :bind ("C-x M-t" . multi-vterm))
+
+(use-package posframe
+  :ensure t)
+
+(use-package vterm-toggle
   :ensure t
+  :after (vterm posframe)
+  :bind ("C-`" . vterm-toggle)
   :config
-  ;; Max out scrollback history limit
-  (setq vterm-max-scrollback 10000)
+  ;; Tell vterm-toggle to use posframe for a floating GUI window
+  (setq vterm-toggle-use-posframe t)
 
-  ;; Map your default shell shell binary explicitly
-  (setq vterm-shell "/bin/bash") ; Swap with "/bin/zsh" if applicable
-
-  ;; Explicitly keep your minimal 4-space layout preferences intact inside terms
-  (setq-default tab-width 4))
-
-;; Bind a quick shortcut to launch or toggle the terminal instance instantly
-(keymap-global-set "C-c t" 'vterm)
+  ;; Define the floating window size and appearance (centered)
+  (setq vterm-toggle-posframe-style 'center)
+  (setq vterm-toggle-posframe-width 90)
+  (setq vterm-toggle-posframe-height 25))
 
 ;; Use spaces instead of tabs globally
 (setq-default indent-tabs-mode nil)
@@ -447,43 +415,43 @@
 (setq-default c-basic-offset 4)
 
 (use-package web-mode
-  :ensure t
-  :mode (("\\.djhtml\\'" . web-mode)
-         ("\\.html\\.djhtml\\'" . web-mode))
-  :init
-  ;; Turn on modern tree-sitter context parsing if available
-  (setq web-mode-enable-tree-sitter t)
-  :config
-  ;; Force Django engine for djhtml extensions
-  (setq web-mode-engines-alist
-        '(("django" . "\\.djhtml\\'")))
+     :ensure t
+     :mode (("\\.djhtml\\'" . web-mode)
+            ("\\.html\\.djhtml\\'" . web-mode))
+     :init
+     ;; Turn on modern tree-sitter context parsing if available
+     (setq web-mode-enable-tree-sitter t)
+     :config
+     ;; Force Django engine for djhtml extensions
+     (setq web-mode-engines-alist
+           '(("django" . "\\.djhtml\\'")))
 
-  ;; Configure Web-Mode matching 4-space indentation layout
-  (setq web-mode-markup-indent-offset 4)
-  (setq web-mode-css-indent-offset 4)
-  (setq web-mode-code-indent-offset 4)
-  (setq web-mode-sql-indent-offset 4)
+     ;; Configure Web-Mode matching 4-space indentation layout
+     (setq web-mode-markup-indent-offset 4)
+     (setq web-mode-css-indent-offset 4)
+     (setq web-mode-code-indent-offset 4)
+     (setq web-mode-sql-indent-offset 4)
 
-  ;; HTML tag behavior automation
-  (setq web-mode-enable-auto-pairing t)
-  (setq web-mode-enable-auto-closing t)
-  (setq web-mode-enable-auto-quoting t)
+     ;; HTML tag behavior automation
+     (setq web-mode-enable-auto-pairing t)
+     (setq web-mode-enable-auto-closing t)
+     (setq web-mode-enable-auto-quoting t)
 
-  ;; Hook up company-mode for inline completion popup inside template tags
-  (add-hook 'web-mode-hook
-            (lambda ()
-              (when (fboundp 'company-mode)
-                (company-mode 1)))))
+     ;; Hook up company-mode for inline completion popup inside template tags
+     (add-hook 'web-mode-hook
+               (lambda ()
+                 (when (fboundp 'company-mode)
+                   (company-mode 1)))))
 
 (use-package company
-  :ensure t
-  :defer t
-  :init
-  (global-company-mode 1)
-  :config
-  ;; Speed up context popups for a snappier feel
-  (setq company-idle-delay 0.1)
-  (setq company-minimum-prefix-length 1))
+:ensure t
+:config
+;; Safely spin up the auto-completion engine across frames
+(global-company-mode 1)
+
+;; Tweak responsiveness variables for instant typing feedback
+(setq company-idle-delay 0.1)
+(setq company-minimum-prefix-length 1))
 
 ;; Reserved for terminal shell customization
 
