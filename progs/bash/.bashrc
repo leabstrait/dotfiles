@@ -59,14 +59,7 @@ export LESS_BLUE=$'\e[38;5;33m'             # Secondary blue
 export LESS_RESET=$'\e[0m'
 
 # Less configuration
-export LESS='-S -R -F --incsearch --mouse --use-color \
--Dd33.16 \
--Du33.16 \
--Ds43.16 \
--DP43.16 \
--DR33.16 \
--DE43.16 \
--DS43.16'
+export LESS='-S -R -F --incsearch --mouse --use-color -Dd33.16 -Du33.16 -Ds43.16 -DP43.16 -DR33.16 -DE43.16 -DS43.16'
 
 # Man / groff formatting colors
 export LESS_TERMCAP_md="${LESS_MINT}"       # Bold: headings, names, options
@@ -132,5 +125,5 @@ alias free='free -m'                              # Show sizes in MB
 alias topdisk='du -a . | sort -n -r | head -n 10' # show top 10 large files/dirs
 alias ip='ip -color=auto'                         # Colorize ip output
 
-# fzf 
+# fzf
 eval "$(fzf --bash)"
