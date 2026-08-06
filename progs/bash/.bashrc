@@ -115,7 +115,7 @@ source /usr/share/doc/pkgfile/command-not-found.bash
 # SSH
 if [[ -z "${SSH_CONNECTION}" ]]; then
    export SSH_AUTH_SOCK="$XDG_RUNTIME_DIR/ssh-agent.socket"
-   # ssh-add ~/.ssh/id_ed25519
+   ssh-add ~/.ssh/id_ed25519
 fi
 
 # system utils
