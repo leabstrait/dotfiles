@@ -1,34 +1,38 @@
 ;;; init.el --- Core Bootstrapper -*- lexical-binding: t; -*-
+;;; init.el --- Core Bootstrapper -*- lexical-binding: t; -*-
 
-;; Optimize garbage collection thresholds during load cycles
+;; 1. Startup Speed Optimizations
+(setq gc-cons-threshold (* 100 1024 1024)
+      read-process-output-max (* 1024 1024)) ; 1MB max read size for fast LSP
+
 (add-hook 'emacs-startup-hook
           (lambda ()
             (setq gc-cons-threshold (* 2 1024 1024))))
 
-;; Standardize package manager tracking engines
+;; 2. Package Management (Emacs 29+)
 (require 'package)
-(setq package-archives '(("gnu"   . "https://elpa.gnu.org/packages/")
-                         ("melpa" . "https://melpa.org")))
-(package-initialize)
+(setq package-archives '(("gnu"    . "https://elpa.gnu.org/packages/")
+                         ("nongnu" . "https://elpa.nongnu.org/packages/")
+                         ("melpa"  . "https://melpa.org/packages/")))
 
-;; Force dynamic index sync if cache records are missing
+;; Fetch the package list automatically if it doesn't exist
 (unless package-archive-contents
   (package-refresh-contents))
 
-;; Bootstrap 'use-package' deployment
-(unless (package-installed-p 'use-package)
-  (package-install 'use-package))
-
-;; Globally mandate auto-fetching for missing declarations
+(require 'use-package)
 (setq use-package-always-ensure t)
 
-;; Execute target configurations written out inside config.org
+;; 3. Literate Configuration Load
 (let ((literate-config (expand-file-name "config.org" user-emacs-directory)))
   (if (file-exists-p literate-config)
       (org-babel-load-file literate-config)
     (message "Warning: config.org file not found in %s" user-emacs-directory)))
 
-;; Load generated user-interface custom vars safely
+;; 4. Isolate Custom Variables
 (setq custom-file (expand-file-name "custom.el" user-emacs-directory))
 (when (file-exists-p custom-file)
   (load custom-file))
+
+
+(set-face-attribute 'mode-line nil :background "DarkSlateGray" :foreground "white")
+(set-face-attribute 'mode-line-inactive nil :background "gray30" :foreground "gray70")
