@@ -105,7 +105,7 @@ alias grep='grep --color=auto'
 # Package manager
 
 # alias to generate and save mirrorlist for pacman
-alias pmrefresh='sudo reflector --country AU,DE --age 24 --protocol https --sort rate --save /etc/pacman.d/mirrorlist'
+alias pmrefresh='sudo reflector --age 24 --protocol https --sort rate --save /etc/pacman.d/mirrorlist'
 
 
 # Command not found, suggest package
@@ -115,7 +115,7 @@ source /usr/share/doc/pkgfile/command-not-found.bash
 # SSH
 if [[ -z "${SSH_CONNECTION}" ]]; then
    export SSH_AUTH_SOCK="$XDG_RUNTIME_DIR/ssh-agent.socket"
-   ssh-add ~/.ssh/id_ed25519
+   ssh-add ~/.ssh/id_ed25519  
 fi
 
 # system utils
