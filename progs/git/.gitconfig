@@ -21,9 +21,6 @@ requireForce = true
 [log]
 decorate = full
 
-[fetch]
-prune = true
-
 [pull]
  rebase = true
 
@@ -57,3 +54,16 @@ merge-test = !git merge --no-commit --no-ff "$@" || echo "Run \\'git merge --abo
 	required = true
 	clean = git-lfs clean -- %f
 	smudge = git-lfs smudge -- %f
+[push]
+	default = current
+	autoSetupRemote = true
+	useForceIfIncludes = true
+[merge]
+	conflictStyle = zdiff3
+[fetch]
+	verifySignatures = true
+	force = true
+[checkout]
+	workers = 4
+[advice]
+	detachedHead = true
