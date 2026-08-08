@@ -24,6 +24,12 @@ decorate = full
 [fetch]
 prune = true
 
+[pull]
+ rebase = true
+
+[rebase]
+autoStash = true
+
 [alias]
 a = add --verbose
 s = status --short
