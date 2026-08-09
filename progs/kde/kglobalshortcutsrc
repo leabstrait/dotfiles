@@ -8,8 +8,8 @@ switch-to-activity-e92a5a69-42f0-4c7d-89f0-5b0f22446b94=none,none,Switch to acti
 Switch keyboard layout to Avestan=none,none,Switch keyboard layout to Avestan
 Switch keyboard layout to English (US)=none,none,Switch keyboard layout to English (US)
 Switch keyboard layout to Nepali=none,none,Switch keyboard layout to Nepali
-Switch to Last-Used Keyboard Layout=Meta+Alt+L,Meta+Alt+L,Switch to Last-Used Keyboard Layout
-Switch to Next Keyboard Layout=Meta+Alt+K,Meta+Alt+K,Switch to Next Keyboard Layout
+Switch to Last-Used Keyboard Layout=Meta+Shift+K,Meta+Alt+L,Switch to Last-Used Keyboard Layout
+Switch to Next Keyboard Layout=Meta+K,Meta+Alt+K,Switch to Next Keyboard Layout
 _k_friendly_name=Keyboard Layout Switcher
 
 [kaccess]
@@ -262,8 +262,11 @@ activate widget 23=none,none,Activate Window List Widget
 activate widget 57=none,none,Activate Pager Widget
 activate widget 788=none,none,Activate Digital Clock Widget
 activate widget 835=none,none,Activate Digital Clock Widget
-activate widget 836=Meta+K,none,Activate Panel Widget
 activate widget 883=Meta+S,none,Activate System Tray Widget
+activate widget 922=Meta+S,none,Activate System Tray Widget
+activate widget 940=Meta+M,none,Activate Global Menu Widget
+activate widget 945=Meta+S,none,Activate System Tray Widget
+activate widget 979=Meta,none,Activate Application Launcher Widget
 clear history=none,none,Clear Notification History
 clear-history=none,none,Clear Clipboard History
 clipboard_action=Meta+Ctrl+X,Meta+Ctrl+X,Automatic Action Popup Menu
@@ -303,7 +306,7 @@ _launch=Meta+Return
 
 [services][org.kde.krunner.desktop]
 RunClipboard=Meta+Shift+V
-_launch=Meta
+_launch=Meta+Space
 
 [services][org.kde.plasma.emojier.desktop]
 _launch=Meta+.
