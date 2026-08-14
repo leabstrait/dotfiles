@@ -245,7 +245,7 @@ powerProfile=Battery\tMeta+B,Battery\tMeta+B,Switch Power Profile
 [plasmashell]
 Slideshow Wallpaper Next Image=none,none,Next Wallpaper Image
 _k_friendly_name=plasmashell
-activate application launcher=Alt+F1,Meta\tAlt+F1,Activate Application Launcher
+activate application launcher=none,Meta\tAlt+F1,Activate Application Launcher
 activate task manager entry 1=Meta+1,Meta+1,Activate Task Manager Entry 1
 activate task manager entry 10=none,none,Activate Task Manager Entry 10
 activate task manager entry 2=Meta+2,Meta+2,Activate Task Manager Entry 2
@@ -256,17 +256,25 @@ activate task manager entry 6=Meta+6,Meta+6,Activate Task Manager Entry 6
 activate task manager entry 7=Meta+7,Meta+7,Activate Task Manager Entry 7
 activate task manager entry 8=Meta+8,Meta+8,Activate Task Manager Entry 8
 activate task manager entry 9=Meta+9,Meta+9,Activate Task Manager Entry 9
+activate widget 1005=none,none,Activate Global Menu Widget
+activate widget 1006=none,none,Activate Application Launcher Widget
+activate widget 1012=none,none,Activate Panel Widget
+activate widget 1014=none,none,Activate System Tray Widget
+activate widget 1032=none,none,Activate Global Menu Widget
+activate widget 1033=none,none,Activate Application Launcher Widget
+activate widget 1040=none,none,Activate Icons-Only Task Manager Widget
 activate widget 125=none,none,Activate Icons-Only Task Manager Widget
 activate widget 126=none,none,Activate Icons-Only Task Manager Widget
 activate widget 23=none,none,Activate Window List Widget
 activate widget 57=none,none,Activate Pager Widget
 activate widget 788=none,none,Activate Digital Clock Widget
 activate widget 835=none,none,Activate Digital Clock Widget
-activate widget 883=Meta+S,none,Activate System Tray Widget
-activate widget 922=Meta+S,none,Activate System Tray Widget
-activate widget 940=Meta+M,none,Activate Global Menu Widget
-activate widget 945=Meta+S,none,Activate System Tray Widget
-activate widget 979=Meta,none,Activate Application Launcher Widget
+activate widget 883=none,none,Activate System Tray Widget
+activate widget 921=none,none,Activate Panel Widget
+activate widget 922=none,none,Activate System Tray Widget
+activate widget 940=none,none,Activate Global Menu Widget
+activate widget 945=none,none,Activate System Tray Widget
+activate widget 987=none,none,Activate System Tray Widget
 clear history=none,none,Clear Notification History
 clear-history=none,none,Clear Clipboard History
 clipboard_action=Meta+Ctrl+X,Meta+Ctrl+X,Automatic Action Popup Menu
@@ -306,7 +314,7 @@ _launch=Meta+Return
 
 [services][org.kde.krunner.desktop]
 RunClipboard=Meta+Shift+V
-_launch=Meta+Space
+_launch=Meta
 
 [services][org.kde.plasma.emojier.desktop]
 _launch=Meta+.
@@ -314,7 +322,6 @@ _launch=Meta+.
 [services][org.kde.spectacle.desktop]
 CurrentMonitorScreenShot=Meta+Alt+Print
 FullScreenScreenShot=none
-OpenWithoutScreenshot=none
 RecordRegion=none
 RecordWindow=none
 WindowUnderCursorScreenShot=none

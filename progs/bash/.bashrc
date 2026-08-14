@@ -82,9 +82,6 @@ export PAGER='less'
 export EDITOR='emacs'
 export VISUAL='emacs'
 
-# Pager
-export PAGER='less'
-
 # Function to run help or man page
 function run-help() {
    COMMAND=$(echo "$READLINE_LINE" | sed 's/^[ \t]*//;s/[ \t]*$//')
@@ -92,17 +89,24 @@ function run-help() {
 }
 bind  -x '"\eh": run-help' # Alt + h for help or manpage
 
+
 # Use bat instead of cat
 alias cat='bat'
 export BAT_THEME='ansi'
 
+
 # diff with color
 alias diff='diff --color=auto'
+
 
 # grep with color
 alias grep='grep --color=auto'
 
+
 # Package manager
+
+# for pacdiff
+DIFFPROG='emacs -nw'
 
 # alias to generate and save mirrorlist for pacman
 alias pmrefresh='sudo reflector --age 24 --protocol https --sort rate --save /etc/pacman.d/mirrorlist'
@@ -115,7 +119,6 @@ source /usr/share/doc/pkgfile/command-not-found.bash
 # SSH
 if [[ -z "${SSH_CONNECTION}" ]]; then
    export SSH_AUTH_SOCK="$XDG_RUNTIME_DIR/ssh-agent.socket"
-   ssh-add ~/.ssh/id_ed25519  
 fi
 
 # system utils
