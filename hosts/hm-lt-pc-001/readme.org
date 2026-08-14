@@ -1,0 +1,293 @@
+#+TITLE: System Provisioning & Configuration Blueprint
+#+PROPERTY: header-args:shell :results output :exports both
+
+* Overview & Infrastructure Bootstrap
+This literate template serves as the single source of truth for bare-metal machine provisioning, post-installation scripting, and configuration deployment.
+
+** Automated Config Mappings Context
+This block dynamically displays active symlink tracking states mapped inside the local directory.
+
+#+BEGIN_SRC conf
+#+INCLUDE: "./config_map.cfg"
+#+END_SRC
+
+** Active Environment Alignment Block
+Execute this block (=C-c C-c=) to trigger your dynamic Python engine to map all symlinks out of the manifest resolved directly by your system's hostname.
+
+#+BEGIN_SRC bash :results output :dir "../../"
+  ./scripts/configs link-all
+#+END_SRC
+
+---
+
+* System Core & Package Infrastructure
+
+** Base Development Framework
+Installs toolchains, compilers, and base components required to handle local builds and AUR packages.
+
+#+BEGIN_SRC shell :dir /sudo::
+  echo "=== Installing Base Development Tools & Git ==="
+  pacman -Syu --needed --noconfirm base-devel git
+#+END_SRC
+
+** Pkgfile Package Query Service
+Configures reverse lookup indices for missing binary allocations and sets up automatic background index timers.
+
+#+BEGIN_SRC shell :dir /sudo::
+  echo "=== Setting up package indexing timers ==="
+  pacman -S --needed --noconfirm pkgfile
+  pkgfile -u
+  systemctl enable --now pkgfile-update.timer
+#+END_SRC
+
+---
+
+* Storage, Memory Alignment & Performance
+
+** Block Device Swap Allocation
+Configures an explicit auxiliary block device to be formatted and mounted purely as system swap space.
+/CRITICAL WARNING: Ensure target identification tags are modified accurately before hitting execution threads./
+
+#+BEGIN_SRC shell :dir /sudo::
+  echo "=== Configuring Dedicated Swap Partitions ==="
+  # Define raw target disk block handle path (e.g., /dev/sdb)
+  TARGET_DISK="<TARGET_BLOCK_DEVICE>"
+
+  if [ "$TARGET_DISK" = "<TARGET_BLOCK_DEVICE>" ]; then
+      echo "❌ Error: You must specify a real block device path before executing this node."
+      exit 1
+  fi
+
+  # Clear old sign tags and write new structure maps
+  wipefs -a "$TARGET_DISK"
+  (
+    echo o   # DOS partition label block layout map
+    echo n   # New allocation partition node block
+    echo p   # Primary standard allocation layout designation
+    echo 1   # Target indexing value ID
+    echo     # Fallback default sector sizing range bounds start
+    echo     # Fallback default sector sizing range bounds end
+    echo t   # Alter system signature identifier formatting mode
+    echo 82  # Primary Linux Swap identity tag hex index value
+    echo w   # Commit blocks to memory allocations permanently
+  ) | fdisk "$TARGET_DISK"
+
+  # Format configuration states out to live operations
+  mkswap "${TARGET_DISK}1"
+  swapon "${TARGET_DISK}1"
+
+  # Register partitions inside systemic mounting arrays permanently
+  UUID_SWAP=$(blkid -s UUID -o value "${TARGET_DISK}1")
+  if ! grep -q "$UUID_SWAP" /etc/fstab; then
+      echo "UUID=$UUID_SWAP none swap defaults 0 0" >> /etc/fstab
+      print "🧬 System Array: fstab configuration written successfully."
+  fi
+#+END_SRC
+
+** Kernel Virtual Memory Adjustments (Swappiness optimization)
+Reduces the kernel's eagerness to drop inactive pages out into swap spaces, shifting standard operations over to high-speed hardware RAM modules.
+
+#+BEGIN_SRC shell :dir /sudo::
+  echo "=== Setting Kernel vm.swappiness to Performance Index (10) ==="
+  sysctl vm.swappiness=10
+
+  CONF_FILE="/etc/sysctl.d/99-swappiness.conf"
+  echo "vm.swappiness=10" > "$CONF_FILE"
+  echo "🧬 Configuration persistent mapping applied securely to $CONF_FILE"
+#+END_SRC
+
+---
+
+* Desktop Environments & Security Orchestrations
+
+** Display Management & Component Stacks
+Pulls down a modern graphical desktop pipeline complete with standard peripheral sound servers, networking utilities, system diagnostic tools, and display managers.
+
+#+BEGIN_SRC shell :dir /sudo::
+  echo "=== Installing Desktop Environments Meta Modules ==="
+  pacman -S --needed --noconfirm \
+    plasma-desktop \
+    plasma-pa \
+    networkmanager \
+    powerdevil \
+    bluedevil \
+    sddm \
+    konsole \
+    dolphin \
+    plasma-systemmonitor
+
+  echo "=== Launching Initial Background Control Daemons ==="
+  systemctl enable sddm.service
+  systemctl enable NetworkManager.service
+#+END_SRC
+
+** Secure Keyring Architecture Setup
+Integrates your standard cryptographic keychain manager pipelines with dynamic Pluggable Authentication Modules (PAM) to decrypt passwords seamlessly upon entry.
+
+#+BEGIN_SRC shell :dir /sudo::
+  echo "=== Synchronizing Keyring Management Toolsets ==="
+  pacman -S --needed --noconfirm kwalletmanager signon-kwallet-extension
+
+  if ! grep -q "pam_kwallet5.so" /etc/pam.d/system-local-login; then
+      echo "ℹ️  Verification Notice: Ensure pam_kwallet elements are active inside /etc/pam.d/sddm"
+  fi
+#+END_SRC
+
+** Interactive Visual Polish & UI Customization Blueprint
+The following rules outline systemic settings modifications that must be applied manually within your desktop management dashboard:
+
+*** Workspace Pager Systems
+1. Open **System Settings** -> **Window Management** -> **Virtual Desktops**.
+2. Initialize exactly **8 distinct view spaces**.
+3. Enable **Navigation wraps around** boundaries.
+4. Set workspace translation rendering styles to **Fade**.
+5. Ensure localized status layout indicators are toggled **Off**.
+
+*** Panel Framework & Desktop Dock Management
+1. Enter Desktop Edit Interface on the standard screen boundary panel.
+2. Scale down absolute line heights to clean, layout-appropriate metrics.
+3. Organize structural widgets exactly from **Left to Right** using this map layout rule:
+   * *Application Menu Launcher*
+   * *Virtual Desktop Workspace Pager Grid*
+   * *Flexible Spacer Module* (Forces rightward alignments)
+   * *Active Task Window Manager*: Restrict visibility profiles to *Current Screen Only* and *Current Desktop Only*.
+   * *System Tray Containment Group*
+   * *User Account Session Switcher*
+   * *Minimize All Windows Toggle (Peek at Desktop)* on the ultimate edge.
+
+*** Titlebar Decorator Sequences
+1. Open **System Settings** -> **Appearance** -> **Window Decorations** -> **Titlebar Buttons**.
+2. Sort active functional nodes to obey this exact positional array layout:
+   * *Left-Hand Sequences:* ~[Application Menu]~ $\rightarrow$ ~[Pin to Workspace]~ $\rightarrow$ ~[Keep Above]~ $\rightarrow$ ~[Hide From Share]~
+   * *Right-Hand Sequences:* ~[Minimize]~ $\rightarrow$ ~[Maximize]~ $\rightarrow$ ~[Close]~
+3. Select an interface theme that enforces high-contrast border definition highlighting around the primary focused frame.
+
+*** Localization, Redirection Keys & Solar Schedules
+1. Inside **Appearance Global Themes**, assign automated sunrise/sunset profiles based on your local coordinates.
+2. Synchronize **Night Light** activation timers to follow the same solar timetable.
+3. Open **Input Devices** -> **Keyboard** -> **Advanced Features**.
+4. Expand the *Caps Lock behavior* dropdown sub-tree and toggle **Map Caps Lock to an additional Control key**.
+
+*** Terminal Emulator Profile Specifications
+1. Open **Terminal Manager Settings** -> **Manage Configuration Profiles**.
+2. Assign a high-contrast theme configuration named =Light=.
+3. Assign a low-intensity fallback nighttime schema named =Dark=.
+
+---
+
+* Typography & Environmental Shell Tooling
+
+** Multi-Script Typography Array
+Provides core unicode definitions across diverse structural glyphs, CJK alphabets, system emojis, and vector layout symbols.
+
+#+BEGIN_SRC shell :dir /sudo::
+  echo "=== Installing System Font Typography Bundles ==="
+  pacman -S --noconfirm \
+    noto-fonts \
+    noto-fonts-cjk \
+    noto-fonts-emoji \
+    noto-fonts-extra \
+    ttf-font-awesome
+
+  echo "=== Installing Nerd Fonts Matrix Packages ==="
+  pacman -S --noconfirm ttf-nerd-fonts-symbols-common
+#+END_SRC
+
+** Modern Command-Line Utility Ecosystem
+Deploys responsive modern alternatives to aging standard Unix binaries alongside active environment runtimes.
+
+#+BEGIN_SRC shell
+  echo "=== Installing Environmental Enhancement Binaries ==="
+  pacman -S  --noconfirm starship nvm eza bat
+#+END_SRC
+
+---
+
+* Local Intelligence Engines & Workspace Completion
+
+** Local Large Language Model Frameworks
+Sets up isolated local offline machine inference servers alongside standard background automation tooling.
+
+#+BEGIN_SRC shell
+  echo "=== Installing Inference Execution Engines ==="
+  pacman -S --noconfirm llama.cpp/ollama
+
+  echo "=== Scaffolding Local Storage Models Block ==="
+  mkdir -p ~/ai/models
+
+  # Target structural URI links matching modern compact foundational files
+  MODEL_URL="<MODEL_GGUF_DIRECT_DOWNLOAD_URL>"
+  MODEL_FILE="<LOCAL_MODEL_FILENAME>.gguf"
+
+  if [ "$MODEL_URL" != "<MODEL_GGUF_DIRECT_DOWNLOAD_URL>" ]; then
+      if [ ! -f ~/ai/models/"$MODEL_FILE" ]; then
+          curl -L "$MODEL_URL" -o ~/ai/models/"$MODEL_FILE"
+      fi
+  fi
+
+  echo "=== Creating Daemon Controller Script Templates ==="
+  cat << 'EOF' > ~/ai/start-local-agent.sh
+  #!/bin/bash
+  MODEL_FILE="<LOCAL_MODEL_FILENAME>.gguf"
+  echo "Launching local language processing interface server on target endpoint: 8080"
+  llama-server \
+    --model ~/ai/models/"$MODEL_FILE" \
+    --ctx-size 4096 \
+    --port 8080
+  EOF
+  chmod +x ~/ai/start-local-agent.sh
+#+END_SRC
+
+---
+
+* Cryptography, Initialization & Deployments
+
+** Host Key Pair Signatures Generation
+Establishes strong cryptographic identity bounds between the host target environment and your code hosting platforms.
+
+#+BEGIN_SRC shell
+  echo "=== Validating Host Cryptographic Keys ==="
+  # Ensure target identity descriptors match execution states safely
+  USER_COMMENT="<PROFILE_EMAIL_OR_IDENTIFIER>"
+
+  if [ ! -f ~/.ssh/id_ed25519 ]; then
+      ssh-keygen -t ed25519 -C "$USER_COMMENT" -N "" -f ~/.ssh/id_ed25519
+  fi
+
+  echo -e "\n=== MANIFEST PUBLIC KEY PAIR BLOCK ==="
+  cat ~/.ssh/id_ed25519.pub
+  echo -e "======================================\n"
+#+END_SRC
+
+*** External Version Control Authentication Links
+Copy the generated keys from the block output directly into your authorization control boards:
+* **GitHub Settings Security Keyboards:** [[https://github.com/settings/keys]]
+* **GitLab Profile Control Authorization:** [[https://gitlab.com/-/profile/keys]]
+
+** Workspace Infrastructure Execution
+Launches automated deep initialization routines to verify folder architectures, dependencies, and paths.
+
+#+BEGIN_SRC shell
+  echo "=== Executing Baseline Internal Workspace Setup Scripts ==="
+  SETUP_WS_SCRIPT = $HOME/ws/i/configs/scripts/setup-ws
+  if [ -x "$SETUP_WS_SCRIPT" ]; then
+    "$SETUP_WS_SCRIPT"
+  else
+      echo "⚠️  Skip execution layer: workspace setup script is not active inside operational paths."
+  fi
+#+END_SRC
+
+** Local Dotfile Configuration Activation
+Applies initial adjustments and registers active symlink matrices into place using the updated Python configuration script.
+
+#+BEGIN_SRC shell
+  echo "=== Running Configuration Post-Install Alignment Triggers ==="
+  CONFIGS_ENGINE="$HOME/ws/i/configs/scripts/configs"
+
+  if [ -x "$CONFIGS_ENGINE" ]; then
+      echo "🚀 Found configs engine script. Linking structural mapping matrix..."
+      "$CONFIGS_ENGINE" link-all
+  else
+      echo "❌ Error: Host deployment configuration script could not be executed at $CONFIGS_ENGINE"
+  fi
+#+END_SRC

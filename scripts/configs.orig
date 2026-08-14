@@ -10,7 +10,7 @@ from pathlib import Path
 
 # ── Configuration Constants ───────────────────────────────────────────────────
 CONFIGS_DIR = Path.home() / "ws/i/configs"  # Enforced fixed workspace location
-CONFIGS_REPO_URL = "git@github.com:leabstrait/configs.git"
+CONFIGS_REPO_URL = "git@github.com:user/configs.git"
 
 def ensure_env(map_file: Path):
     """Ensure host config directories and tracking files exist securely before reads/writes."""
@@ -364,30 +364,6 @@ DNS={dns}
         print("Device image write complete.")
 
 
-def update_repository_with_remote():
-    git_dir = CONFIGS_DIR / ".git"
-    try:
-        if git_dir.is_dir():
-            print(f"🔄 Repository exists. Enforcing SSH Remote URL structure...")
-            subprocess.run(["git", "-C", str(CONFIGS_DIR), "remote", "set-url", "origin", CONFIGS_REPO_URL], check=True)
-
-            print(f"📥 Pulling latest upstream code modifications...\n   ↳ Target: {CONFIGS_DIR}")
-            subprocess.run(["git", "-C", str(CONFIGS_DIR), "pull", "--rebase", "--autostash"], check=True)
-        else:
-            print(f"✨ Target directory is untracked. Checking remote repository connection...")
-            clone_res = subprocess.run(["git", "clone", CONFIGS_REPO_URL, str(CONFIGS_DIR)])
-            
-            if clone_res.returncode != 0:
-                print("⚠️  Upstream repository cloning failed (does not exist or unauthorized).")
-                print(f"🔧 Creating a brand new local repository context at {CONFIGS_DIR}...")
-                CONFIGS_DIR.mkdir(parents=True, exist_ok=True)
-                subprocess.run(["git", "init", "-b", "main",  str(CONFIGS_DIR)], check=True)
-                subprocess.run(["git", "-C", str(CONFIGS_DIR), "remote", "add", "origin", CONFIGS_REPO_URL], check=True)
-                print(f"✅ Repository initialized locally with origin configured to: {CONFIGS_REPO_URL}")
-    except subprocess.CalledProcessError as git_err:
-        print(f"❌ Error: Git execution management runtime error: {git_err}")
-            
-
 # ── App Execution Orchestrator Commands ─────────────────────────────────────────
 def main():
     args = sys.argv[1:]
@@ -424,8 +400,6 @@ Commands:
         return
 
     if cmd == "init-host":
-        update_repository_with_remote()
-        
         current_host = socket.gethostname()
         host_dir = CONFIGS_DIR / "hosts" / current_host
         map_file = host_dir / "configs_map.cfg"
@@ -592,7 +566,27 @@ Commands:
             print(f"📊 METRICS SUMMARY: Total Tracked: {c_total}  |  Healthy: {c_ok}  |  Conflicts/Unlinked: {c_diff}  |  Missing: {c_miss}\n")
 
     elif cmd == "update":
-        update_repository_with_remote()
+        git_dir = CONFIGS_DIR / ".git"
+        try:
+            if git_dir.is_dir():
+                print(f"🔄 Repository exists. Enforcing SSH Remote URL structure...")
+                subprocess.run(["git", "-C", str(CONFIGS_DIR), "remote", "set-url", "origin", CONFIGS_REPO_URL], check=True)
+
+                print(f"📥 Pulling latest upstream code modifications...\n   ↳ Target: {CONFIGS_DIR}")
+                subprocess.run(["git", "-C", str(CONFIGS_DIR), "pull", "--rebase", "--autostash"], check=True)
+            else:
+                print(f"✨ Target directory is untracked. Checking remote repository connection...")
+                clone_res = subprocess.run(["git", "clone", CONFIGS_REPO_URL, str(CONFIGS_DIR)])
+
+                if clone_res.returncode != 0:
+                    print("⚠️  Upstream repository cloning failed (does not exist or unauthorized).")
+                    print(f"🔧 Creating a brand new local repository context at {CONFIGS_DIR}...")
+                    CONFIGS_DIR.mkdir(parents=True, exist_ok=True)
+                    subprocess.run(["git", "init", str(CONFIGS_DIR)], check=True)
+                    subprocess.run(["git", "-C", str(CONFIGS_DIR), "remote", "add", "origin", CONFIGS_REPO_URL], check=True)
+                    print(f"✅ Repository initialized locally with origin configured to: {CONFIGS_REPO_URL}")
+        except subprocess.CalledProcessError as git_err:
+            print(f"❌ Error: Git execution management runtime error: {git_err}")
 
     else:
         # Pass everything else directly to standard Git execution context
