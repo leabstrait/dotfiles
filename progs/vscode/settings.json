@@ -30,7 +30,7 @@
         "outerjoin",
         "venv"
     ],
-    "debug.console.fontFamily": "NotoSansM Nerd Font Mono",
+    "debug.console.fontFamily": "FiraCode Nerd Font",
     "diffEditor.ignoreTrimWhitespace": false,
     "diffEditor.renderGutterMenu": true,
     "diffEditor.renderSideBySide": true,
@@ -44,7 +44,7 @@
     "editor.cursorStyle": "block",
     "editor.defaultFormatter": "vscode.html-language-features",
     "editor.find.autoFindInSelection": "multiline",
-    "editor.fontFamily": "NotoSansM Nerd Font Mono",
+    "editor.fontFamily": "FiraCode Nerd Font",
     "editor.fontLigatures": true,
     "editor.formatOnSaveMode": "modificationsIfAvailable",
     "editor.guides.bracketPairs": false,
@@ -97,7 +97,7 @@
     "terminal.integrated.defaultProfile.windows": "PowerShell",
     "terminal.integrated.enablePersistentSessions": false,
     "terminal.integrated.enableVisualBell": true,
-    "terminal.integrated.fontFamily": "NotoSansM Nerd Font Mono",
+    "terminal.integrated.fontFamily": "FiraCode Nerd Font",
     "terminal.integrated.profiles.linux": {
         "Aider AI": {
             "args": [

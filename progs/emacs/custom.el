@@ -11,7 +11,6 @@
  ;; If you edit it by hand, you could mess it up, so be careful.
  ;; Your init file should contain only one such instance.
  ;; If there is more than one, they won't work right.
- '(default ((t (:background "#1a1e24" :foreground "#eeeeee"))))
  '(company-tooltip-common ((t (:foreground "#00adb5" :weight bold))))
  '(company-tooltip-scrollbar-thumb ((t (:background "#00adb5"))))
  '(company-tooltip-scrollbar-track ((t (:background "#222831"))))
