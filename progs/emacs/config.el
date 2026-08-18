@@ -21,7 +21,7 @@
 (display-battery-mode t)
 (display-time-mode t)
 (size-indication-mode t)
-(tab-bar-mode t)
+(global-tab-line-mode t)
 
 ;;(setq indicate-empty-lines t)
 (setq indicate-buffer-boundaries '((top . left) (bottom . left) (up . left) (down . left)))
