@@ -5,7 +5,7 @@
 [[ $- != *i* ]] && return
 
 # PATH configuration
-export PATH="$HOME/.local/bin:$PATH"
+export PATH="~/.local/bin:$PATH"
 
 # Bash options
 shopt -s autocd                  # Automatically cd to a directory if only its path is entered
