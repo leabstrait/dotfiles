@@ -25,9 +25,7 @@
     "cSpell.userWords": [
         "autoref",
         "djhtml",
-        "hightlight",
         "JINJABASE",
-        "outerjoin",
         "venv"
     ],
     "debug.console.fontFamily": "FiraCode Nerd Font",
@@ -308,6 +306,5 @@
     "ruff.path": [
         "/usr/bin/ruff"
     ],
-    "ruff.trace.server": "verbose",
-    "window.customTitleBarVisibility": "never",
+    "ruff.trace.server": "verbose"
 }

@@ -1,0 +1,133 @@
+#!/usr/bin/env python
+
+import os
+import platform
+import shutil
+import subprocess
+import sys
+import tempfile
+
+
+# --- Workspace Paths Configuration ---
+SRC_DIR = os.path.expanduser("~/ws/i/emacs")
+SRC_ROOT = os.path.dirname(SRC_DIR) # Automatically derives parent folder for cloning if missing
+REPO_URL = "https://git.savannah.gnu.org/git/emacs.git"
+
+# --- OS Specific Toolchains ---
+MAC_DEPS = [
+    "autoconf", "automake", "pkg-config", "texinfo", "libgccjit",
+    "tree-sitter", "gnutls", "jpeg", "giflib", "libtiff", "webp",
+    "libpng", "glib", "jansson"
+]
+
+ARCH_DEPS = [
+    "base-devel", "git", "libgccjit", "tree-sitter", "jansson",
+    "libxml2", "gnutls", "gtk3", "texinfo", "harfbuzz", "cairo"
+]
+
+def run(cmd, **kwargs):
+    print(f"\n🚀 Running: {' '.join(cmd) if isinstance(cmd, list) else cmd}")
+    subprocess.run(cmd, check=True, **kwargs)
+
+def get_latest_stable_tag():
+    print("🔍 Fetching latest stable release tag...")
+    output = subprocess.check_output(["git", "ls-remote", "--tags", REPO_URL], text=True)
+    tags = []
+    for line in output.splitlines():
+        if "refs/tags/emacs-" in line and not any(x in line for x in ["rc", "pre", "beta", "^{}"]):
+            tags.append(line.split("refs/tags/")[-1].strip())
+
+    def version_key(v):
+        return [int(d) for d in v.replace("emacs-", "").split(".") if d.isdigit()]
+
+    return max(tags, key=version_key) if tags else "master"
+
+def sync_source_repo():
+    os.makedirs(os.path.dirname(SRC_DIR), exist_ok=True)
+    latest_tag = get_latest_stable_tag()
+    print(f"🎯 Target version: {latest_tag}")
+
+    if not os.path.exists(SRC_DIR):
+        run(["git", "clone", "--depth", "1", "--branch", latest_tag, REPO_URL, SRC_DIR])
+    else:
+        run(["git", "fetch", "--tags"], cwd=SRC_DIR)
+        run(["git", "checkout", latest_tag], cwd=SRC_DIR)
+
+def install_dependencies(os_type):
+    print("🛠️ Installing build dependencies...")
+    if os_type == "darwin":
+        run(["brew", "install"] + MAC_DEPS)
+    elif os.path.exists("/etc/arch-release"):
+        run(["sudo", "pacman", "-S", "--needed", "--noconfirm"] + ARCH_DEPS)
+    elif command_exists("apt-get"):
+        run(["sudo", "apt-get", "update"])
+        run(["sudo", "apt-get", "install", "-y"] + DEBIAN_DEPS)
+    else:
+        print("⚠️ Unrecognized Linux package manager. Ensure standard Emacs build dependencies are installed.")
+
+def command_exists(cmd):
+    return shutil.which(cmd) is not None
+
+def setup_environment(os_type):
+    env = os.environ.copy()
+    if os_type == "darwin":
+        brew_prefix = os.environ.get("HOMEBREW_PREFIX") or subprocess.check_output(["brew", "--prefix"], text=True).strip()
+        env["PATH"] = f"{brew_prefix}/opt/texinfo/bin:{brew_prefix}/bin:{env.get('PATH', '')}"
+
+        # Point pkg-config to Homebrew paths. This eliminates the need for manual CFLAGS/LDFLAGS globally.
+        pkg_paths = [f"{brew_prefix}/lib/pkgconfig", f"{brew_prefix}/share/pkgconfig"]
+        for pkg in ["cairo", "harfbuzz", "glib", "libgccjit"]:
+            pkg_paths.append(f"{brew_prefix}/opt/{pkg}/lib/pkgconfig")
+        env["PKG_CONFIG_PATH"] = ":".join(pkg_paths) + f":{env.get('PKG_CONFIG_PATH', '')}"
+    return env
+
+def main():
+    os_type = platform.system().lower()
+    print(f"🎯 Target Platform: {os_type.upper()}")
+
+    sync_source_repo()
+    install_dependencies(os_type)
+    env = setup_environment(os_type)
+
+    with tempfile.TemporaryDirectory(prefix="emacs_build_") as tmp_dir:
+        build_sandbox = os.path.join(tmp_dir, "emacs")
+        shutil.copytree(SRC_DIR, build_sandbox, ignore=shutil.ignore_patterns('.git'))
+
+        configure_flags = [
+            "./configure",
+            "--with-cairo",
+            "--with-harfbuzz",
+            "--with-native-compilation=aot",
+            "--with-tree-sitter",
+            "--with-json",
+            "--with-xml2",
+            "--with-gnutls",
+            "--with-modules"
+        ]
+
+        # UI Windowing system selection
+        if os_type == "darwin":
+            configure_flags.append("--with-ns")
+        else:
+            configure_flags.append("--with-toolkit=pgtk")
+
+        run(["./autogen.sh"], env=env, cwd=build_sandbox)
+        run(configure_flags, env=env, cwd=build_sandbox)
+
+        cores = os.cpu_count() or 4
+        run(["make", f"-j{cores}"], env=env, cwd=build_sandbox)
+
+        # Installation routing
+        if os_type == "darwin":
+            app_src = os.path.join(build_sandbox, "nextstep", "Emacs.app")
+            run(["sudo", "rm", "-rf", "/Applications/Emacs.app"])
+            run(["sudo", "mv", app_src, "/Applications/"])
+            run(["sudo", "mkdir", "-p", "/usr/local/bin"])
+            run(["sudo", "ln", "-sf", "/Applications/Emacs.app/Contents/MacOS/Emacs", "/usr/local/bin/emacs"])
+        else:
+            run(["sudo", "make", "install"], cwd=build_sandbox)
+
+    print(f"\n🎉 Successfully built and installed Emacs on {os_type.upper()}!")
+
+if __name__ == "__main__":
+    main()

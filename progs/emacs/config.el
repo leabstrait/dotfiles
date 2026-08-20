@@ -8,6 +8,7 @@
   (setq auto-save-file-name-transforms
         `((".*" ,(expand-file-name "var/auto-save/" user-emacs-directory) t))))
 
+
 (setq-default toggle-truncate-lines t) ; Always truncate long lines
 (setq truncate-lines t)
 (delete-selection-mode 1) ; Overwrite selected text globally
