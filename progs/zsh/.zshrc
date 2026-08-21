@@ -1,26 +1,30 @@
 # =====================================================================
-# THE COMPLETE GNU UTILITIES STACK (macOS & Linux)
+# .zshrc - Unified Shell Configuration (macOS & Arch Linux)
 # =====================================================================
 
-case "$OSTYPE" in
-    darwin*) # macOS Specific Configuration
-        # Rely on $HOMEBREW_PREFIX set by .zprofile to avoid slow subshell calls
-        if [[ -n "$HOMEBREW_PREFIX" ]]; then
+[[ $- != *i* ]] && return
 
-            # 1. Custom Paths for Utilities Without 'gnubin' Subfolders
+# ---------------------------------------------------------------------
+# 1. PATH CONFIGURATION & TOOLCHAIN SETUP
+# ---------------------------------------------------------------------
+export PATH="$HOME/.local/bin:$PATH"
+
+case "$(uname -s)" in
+    Darwin) # macOS Homebrew GNU Toolchain Overrides
+        if [[ -n "$HOMEBREW_PREFIX" ]]; then
             export PATH="$HOMEBREW_PREFIX/opt/curl/bin:$PATH"
             export PATH="$HOMEBREW_PREFIX/opt/gnu-getopt/bin:$PATH"
             export PATH="$HOMEBREW_PREFIX/opt/jpeg/bin:$PATH"
             export PATH="$HOMEBREW_PREFIX/opt/binutils/bin:$PATH"
+            export PATH="$HOMEBREW_PREFIX/opt/gnu-indent/bin:$PATH"
+            export PATH="$HOMEBREW_PREFIX/opt/gnu-which/bin:$PATH"
 
-            # 2 & 3. Complete GNU Binaries & Manual Pages (Loop for cleaner code)
-            local gnu_tools=(coreutils findutils gnu-sed gnu-tar gawk grep make diffutils ed gpatch wdiff)
+            local gnu_tools=(coreutils findutils gnu-sed gnu-tar gawk grep make diffutils ed gpatch wdiff gnu-indent gnu-which)
             for tool in "${gnu_tools[@]}"; do
                 export PATH="$HOMEBREW_PREFIX/opt/$tool/libexec/gnubin:$PATH"
                 export MANPATH="$HOMEBREW_PREFIX/opt/$tool/libexec/gnuman:$MANPATH"
             done
 
-            # 4. Mappings for Formulas Missing 'gnubin' Structures
             alias objdump='gobjdump'
             alias nm='gnm'
             alias size='gsize'
@@ -31,58 +35,86 @@ case "$OSTYPE" in
             alias which='gwhich'
         fi
         ;;
-
-    linux*) # Linux Specific Configuration
-        # Natively runs GNU tools out of the box. No manual overrides are required.
+    Linux)
+        # Arch Linux uses native standard toolchain paths
         ;;
 esac
 
-# =====================================================================
-# VERIFICATION BLOCK
-# =====================================================================
-# Run `verify_all_gnu_tools` manually in the terminal to test your environment.
-verify_all_gnu_tools() {
-    echo "--- Complete GNU Environment Verification ---"
+# ---------------------------------------------------------------------
+# 2. EDITOR, PAGER & FORMATTING ENVIRONMENT
+# ---------------------------------------------------------------------
+export EDITOR='emacs'
+export VISUAL='emacs'
+export PAGER='less'
+export MANPAGER='less -R'
+export MANROFFOPT='-P -c'
 
-    if curl --version 2>&1 | grep -q "Features:"; then echo "✅ curl: Homebrew version active"; else echo "❌ curl: Native macOS active"; fi
-    if getopt --version 2>&1 | grep -q "getopt"; then echo "✅ getopt: GNU gnu-getopt active"; else echo "❌ getopt: Native BSD active"; fi
+export WORDCHARS="${WORDCHARS//[&.;]/}"
+export SUDO_PROMPT=$'\e[38;2;207;34;46mPassword:\e[0m '
 
-    if command ls --version >/dev/null 2>&1; then echo "✅ coreutils (ls): GNU active"; else echo "❌ coreutils (ls): Native BSD active"; fi
-    if find --version >/dev/null 2>&1; then echo "✅ findutils (find): GNU active"; else echo "❌ findutils (find): Native BSD active"; fi
-    if sed --version >/dev/null 2>&1; then echo "✅ gnu-sed (sed): GNU active"; else echo "❌ gnu-sed (sed): Native BSD active"; fi
-    if tar --version 2>&1 | grep -q "GNU"; then echo "✅ gnu-tar (tar): GNU active"; else echo "❌ gnu-tar (tar): Native BSD active"; fi
-    if awk --version 2>&1 | grep -q "GNU"; then echo "✅ gawk (awk): GNU active"; else echo "❌ gawk (awk): Native BSD active"; fi
-    if grep --version >/dev/null 2>&1; then echo "✅ grep (grep): GNU active"; else echo "❌ grep (grep): Native BSD active"; fi
-    if make --version >/dev/null 2>&1; then echo "✅ make (make): GNU active"; else echo "❌ make (make): Native BSD active"; fi
-    if diff --version 2>&1 | grep -q "GNU diffutils"; then echo "✅ diffutils (diff): GNU active"; else echo "❌ diffutils (diff): Native BSD active"; fi
-    if gzip --version 2>&1 | grep -q "gzip"; then echo "✅ gzip (gzip): GNU active"; else echo "❌ gzip (gzip): Native BSD active"; fi
+# Less UI Colors & Configurations
+export LESS_MINT=$'\e[38;5;43m'
+export LESS_BLUE=$'\e[38;5;33m'
+export LESS_RESET=$'\e[0m'
+export LESS='-S -R -F --incsearch --mouse --use-color -Dd33.16 -Du33.16 -Ds43.16 -DP43.16 -DR33.16 -DE43.16 -DS43.16'
+export LESS_TERMCAP_md="${LESS_MINT}"
+export LESS_TERMCAP_me="${LESS_RESET}"
+export LESS_TERMCAP_us="${LESS_BLUE}"
+export LESS_TERMCAP_ue="${LESS_RESET}"
+export LESS_TERMCAP_so=$'\e[48;5;43;30m'
+export LESS_TERMCAP_se="${LESS_RESET}"
 
-    if ed --version >/dev/null 2>&1; then echo "✅ ed (ed): GNU active"; else echo "❌ ed (ed): Native BSD active"; fi
-    if patch --version 2>&1 | grep -q "GNU patch"; then echo "✅ gpatch (patch): GNU active"; else echo "❌ gpatch (patch): Native BSD active"; fi
+# ---------------------------------------------------------------------
+# 3. HISTORY & SHELL BEHAVIOR OPTIONS
+# ---------------------------------------------------------------------
+export HISTFILE=~/.zsh_history
+export HISTSIZE=1000
+export SAVEHIST=500
+setopt APPEND_HISTORY
+setopt HIST_IGNORE_DUPS
+setopt HIST_IGNORE_ALL_DUPS
+setopt HIST_SAVE_NO_DUPS
 
-    if objdump --version 2>&1 | grep -q "GNU"; then echo "✅ binutils (objdump): GNU active"; else echo "❌ binutils (objdump): Native BSD active"; fi
-    if wdiff --version >/dev/null 2>&1; then echo "✅ wdiff (wdiff): GNU active"; else echo "❌ wdiff (wdiff): Not found / Inactive"; fi
-    if indent --version 2>&1 | grep -q "GNU"; then echo "✅ gnu-indent (indent): GNU active"; else echo "❌ gnu-indent (indent): Native BSD active"; fi
-    if which --version 2>&1 | grep -q "GNU"; then echo "✅ gnu-which (which): GNU active"; else echo "❌ gnu-which (which): Native BSD active"; fi
-
-    echo "---------------------------------------------"
-}
-
-# =====================================================================
-# CUSTOM ALIASES & MODERN CLI ALIAS OVERRIDES
-# =====================================================================
+# ---------------------------------------------------------------------
+# 4. FILE MANAGEMENT & NAVIGATION ALIASES
+# ---------------------------------------------------------------------
 alias cat='bat'
-alias ls='eza -l'
+alias ls='eza -lh --color=always --group-directories-first --icons'
+alias ll='ls -l'
 alias la='eza -la'
+alias lsd='ls -ld *(-/DN)'
 alias tree='eza --tree'
 
-# =====================================================================
-# THIRD PARTY SHELL PLUGINS & PROMPT INITIALIZATION
-# =====================================================================
+alias cp='cp -riv'
+alias mkdir='mkdir -vp'
+alias mv='mv -iv'
+alias rm='rm -riv'
+alias rs='rsync -r --info=progress2'
+
+alias diff='diff --color=auto'
+alias grep='grep --color=auto'
+alias df='df -h'
+alias free='free -m'
+alias topdisk='du -a . | sort -n -r | head -n 10'
+alias ip='ip -color=auto'
+
+# ---------------------------------------------------------------------
+# 5. SYSTEM UTILITIES & PACKAGE MANAGEMENT
+# ---------------------------------------------------------------------
+export DIFFPROG='emacs -nw'
+alias pmrefresh='sudo reflector --age 24 --protocol https --sort rate --save /etc/pacman.d/mirrorlist'
+
+# ---------------------------------------------------------------------
+# 6. THIRD-PARTY TOOLS & INTEGRATIONS
+# ---------------------------------------------------------------------
 if command -v fzf >/dev/null 2>&1; then
-source <(fzf --zsh)
+    source <(fzf --zsh)
 fi
 
 if command -v starship >/dev/null 2>&1; then
-eval "$(starship init zsh)"
+    eval "$(starship init zsh)"
+fi
+
+if [[ -z "${SSH_CONNECTION}" ]]; then
+   export SSH_AUTH_SOCK="$XDG_RUNTIME_DIR/ssh-agent.socket"
 fi

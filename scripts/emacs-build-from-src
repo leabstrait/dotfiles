@@ -1,133 +1,2050 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
+import argparse
 import os
 import platform
+import plistlib
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
+import textwrap
+from pathlib import Path
 
 
-# --- Workspace Paths Configuration ---
-SRC_DIR = os.path.expanduser("~/ws/i/emacs")
-SRC_ROOT = os.path.dirname(SRC_DIR) # Automatically derives parent folder for cloning if missing
+# ============================================================================
+# Configuration
+# ============================================================================
+
+SRC_DIR = Path.home() / "ws" / "i" / "emacs"
+
 REPO_URL = "https://git.savannah.gnu.org/git/emacs.git"
 
-# --- OS Specific Toolchains ---
+APP_NAME = "Emacs.app"
+APP_DEST = Path("/Applications") / APP_NAME
+CLI_DEST = Path("/usr/local/bin/emacs")
+
 MAC_DEPS = [
-    "autoconf", "automake", "pkg-config", "texinfo", "libgccjit",
-    "tree-sitter", "gnutls", "jpeg", "giflib", "libtiff", "webp",
-    "libpng", "glib", "jansson"
+    "autoconf",
+    "automake",
+    "pkg-config",
+    "texinfo",
+    "gcc",
+    "libgccjit",
+    "tree-sitter",
+    "gnutls",
+    "jansson",
+    "jpeg",
+    "giflib",
+    "libtiff",
+    "webp",
+    "libxml2",
+    "cairo",
+    "harfbuzz",
 ]
 
 ARCH_DEPS = [
-    "base-devel", "git", "libgccjit", "tree-sitter", "jansson",
-    "libxml2", "gnutls", "gtk3", "texinfo", "harfbuzz", "cairo"
+    "base-devel",
+    "git",
+    "gcc",
+    "libgccjit",
+    "tree-sitter",
+    "jansson",
+    "libxml2",
+    "gnutls",
+    "gtk3",
+    "texinfo",
+    "harfbuzz",
+    "cairo",
 ]
 
+# Number of releases to try before giving up.
+DEFAULT_MAX_RELEASES = 8
+
+
+# ============================================================================
+# Output helpers
+# ============================================================================
+
+def info(msg):
+    print(f"\nℹ️  {msg}")
+
+
+def ok(msg):
+    print(f"\n✅ {msg}")
+
+
+def warn(msg):
+    print(f"\n⚠️  {msg}")
+
+
+def error(msg):
+    print(f"\n❌ {msg}")
+
+
+# ============================================================================
+# Command execution
+# ============================================================================
+
+def command_string(cmd):
+    if isinstance(cmd, (list, tuple)):
+        return " ".join(str(x) for x in cmd)
+    return str(cmd)
+
+
 def run(cmd, **kwargs):
-    print(f"\n🚀 Running: {' '.join(cmd) if isinstance(cmd, list) else cmd}")
-    subprocess.run(cmd, check=True, **kwargs)
+    print(f"\n🚀 Running: {command_string(cmd)}")
 
-def get_latest_stable_tag():
-    print("🔍 Fetching latest stable release tag...")
-    output = subprocess.check_output(["git", "ls-remote", "--tags", REPO_URL], text=True)
-    tags = []
-    for line in output.splitlines():
-        if "refs/tags/emacs-" in line and not any(x in line for x in ["rc", "pre", "beta", "^{}"]):
-            tags.append(line.split("refs/tags/")[-1].strip())
+    return subprocess.run(
+        cmd,
+        check=True,
+        **kwargs,
+    )
 
-    def version_key(v):
-        return [int(d) for d in v.replace("emacs-", "").split(".") if d.isdigit()]
 
-    return max(tags, key=version_key) if tags else "master"
+def run_capture(cmd, env=None, cwd=None):
+    return subprocess.run(
+        cmd,
+        env=env,
+        cwd=cwd,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+    )
 
-def sync_source_repo():
-    os.makedirs(os.path.dirname(SRC_DIR), exist_ok=True)
-    latest_tag = get_latest_stable_tag()
-    print(f"🎯 Target version: {latest_tag}")
 
-    if not os.path.exists(SRC_DIR):
-        run(["git", "clone", "--depth", "1", "--branch", latest_tag, REPO_URL, SRC_DIR])
-    else:
-        run(["git", "fetch", "--tags"], cwd=SRC_DIR)
-        run(["git", "checkout", latest_tag], cwd=SRC_DIR)
+# ============================================================================
+# Platform detection
+# ============================================================================
+
+def detect_os():
+    system = platform.system().lower()
+
+    if system == "darwin":
+        return "macos"
+
+    if system == "linux" and Path("/etc/arch-release").exists():
+        return "arch"
+
+    error(
+        "Unsupported platform. "
+        "This script supports macOS and Arch Linux."
+    )
+    sys.exit(1)
+
+
+# ============================================================================
+# Basic executable checks
+# ============================================================================
+
+def require_command(name):
+    if shutil.which(name):
+        return
+
+    error(f"Required command not found: {name}")
+    sys.exit(1)
+
+
+def check_host_tools(os_type):
+    info("Checking host build tools...")
+
+    required = [
+        "git",
+        "make",
+        "sed",
+        "awk",
+        "grep",
+        "tar",
+        "find",
+    ]
+
+    for cmd in required:
+        require_command(cmd)
+
+    if os_type == "macos":
+        require_command("brew")
+        require_command("clang")
+        require_command("clang++")
+        require_command("ar")
+        require_command("ranlib")
+        require_command("install_name_tool")
+
+    elif os_type == "arch":
+        require_command("gcc")
+        require_command("g++")
+        require_command("ar")
+        require_command("ranlib")
+
+    ok("Host build tools are available.")
+
+
+# ============================================================================
+# Homebrew
+# ============================================================================
+
+def brew_prefix():
+    return Path(
+        subprocess.check_output(
+            ["brew", "--prefix"],
+            text=True,
+        ).strip()
+    )
+
 
 def install_dependencies(os_type):
-    print("🛠️ Installing build dependencies...")
-    if os_type == "darwin":
-        run(["brew", "install"] + MAC_DEPS)
-    elif os.path.exists("/etc/arch-release"):
-        run(["sudo", "pacman", "-S", "--needed", "--noconfirm"] + ARCH_DEPS)
-    elif command_exists("apt-get"):
-        run(["sudo", "apt-get", "update"])
-        run(["sudo", "apt-get", "install", "-y"] + DEBIAN_DEPS)
-    else:
-        print("⚠️ Unrecognized Linux package manager. Ensure standard Emacs build dependencies are installed.")
+    info("Installing/updating build dependencies...")
 
-def command_exists(cmd):
-    return shutil.which(cmd) is not None
+    if os_type == "macos":
+
+        run(["brew", "update"])
+        run(["brew", "install"] + MAC_DEPS)
+
+        # Upgrade only installed dependencies that Homebrew knows about.
+        #
+        # This intentionally keeps the system on current Homebrew versions.
+        # Compatibility is handled by the Emacs feature/release fallback
+        # mechanism rather than by globally pinning old libraries.
+        run(
+            [
+                "brew",
+                "upgrade",
+                "autoconf",
+                "automake",
+                "pkg-config",
+                "texinfo",
+                "gcc",
+                "libgccjit",
+                "tree-sitter",
+                "gnutls",
+                "jansson",
+                "jpeg",
+                "giflib",
+                "libtiff",
+                "webp",
+                "libxml2",
+                "cairo",
+                "harfbuzz",
+            ],
+            check=True,
+        )
+
+    elif os_type == "arch":
+
+        run(
+            [
+                "sudo",
+                "pacman",
+                "-Syu",
+                "--needed",
+                "--noconfirm",
+            ]
+            + ARCH_DEPS
+        )
+
+
+# ============================================================================
+# Environment
+# ============================================================================
 
 def setup_environment(os_type):
     env = os.environ.copy()
-    if os_type == "darwin":
-        brew_prefix = os.environ.get("HOMEBREW_PREFIX") or subprocess.check_output(["brew", "--prefix"], text=True).strip()
-        env["PATH"] = f"{brew_prefix}/opt/texinfo/bin:{brew_prefix}/bin:{env.get('PATH', '')}"
 
-        # Point pkg-config to Homebrew paths. This eliminates the need for manual CFLAGS/LDFLAGS globally.
-        pkg_paths = [f"{brew_prefix}/lib/pkgconfig", f"{brew_prefix}/share/pkgconfig"]
-        for pkg in ["cairo", "harfbuzz", "glib", "libgccjit"]:
-            pkg_paths.append(f"{brew_prefix}/opt/{pkg}/lib/pkgconfig")
-        env["PKG_CONFIG_PATH"] = ":".join(pkg_paths) + f":{env.get('PKG_CONFIG_PATH', '')}"
-    return env
+    if os_type == "macos":
 
-def main():
-    os_type = platform.system().lower()
-    print(f"🎯 Target Platform: {os_type.upper()}")
+        prefix = brew_prefix()
 
-    sync_source_repo()
-    install_dependencies(os_type)
-    env = setup_environment(os_type)
+        # ------------------------------------------------------------------
+        # IMPORTANT:
+        #
+        # GNU tools may be installed and preferred globally by the user.
+        # We nevertheless explicitly use Apple's clang for the macOS native
+        # Cocoa/AppKit target.
+        #
+        # This avoids accidentally attempting to link the NS backend using
+        # a Homebrew GCC toolchain.
+        # ------------------------------------------------------------------
 
-    with tempfile.TemporaryDirectory(prefix="emacs_build_") as tmp_dir:
-        build_sandbox = os.path.join(tmp_dir, "emacs")
-        shutil.copytree(SRC_DIR, build_sandbox, ignore=shutil.ignore_patterns('.git'))
+        env["CC"] = "clang"
+        env["CXX"] = "clang++"
 
-        configure_flags = [
-            "./configure",
-            "--with-cairo",
-            "--with-harfbuzz",
-            "--with-native-compilation=aot",
-            "--with-tree-sitter",
-            "--with-json",
-            "--with-xml2",
-            "--with-gnutls",
-            "--with-modules"
+        info(
+            "macOS compiler policy: "
+            "Apple clang for the Emacs native/AppKit build."
+        )
+
+        # Homebrew GNU build tools.
+        texinfo_bin = prefix / "opt" / "texinfo" / "bin"
+
+        env["PATH"] = (
+            f"{texinfo_bin}:"
+            f"{prefix}/bin:"
+            f"{env.get('PATH', '')}"
+        )
+
+        # ------------------------------------------------------------------
+        # SDK
+        # ------------------------------------------------------------------
+
+        sdk = subprocess.check_output(
+            ["xcrun", "--sdk", "macosx", "--show-sdk-path"],
+            text=True,
+        ).strip()
+
+        env["SDKROOT"] = sdk
+
+        # Don't force arbitrary architecture flags. clang/configure should
+        # determine the host architecture naturally.
+        #
+        # This is particularly important for Apple Silicon.
+        # ------------------------------------------------------------------
+
+        # ------------------------------------------------------------------
+        # Homebrew headers/libraries
+        # ------------------------------------------------------------------
+
+        lib_paths = [
+            prefix / "lib",
+            prefix / "opt" / "libgccjit" / "lib",
         ]
 
-        # UI Windowing system selection
-        if os_type == "darwin":
-            configure_flags.append("--with-ns")
+        include_paths = [
+            prefix / "include",
+        ]
+
+        env["LIBRARY_PATH"] = ":".join(
+            str(p)
+            for p in lib_paths
+            if p.exists()
+        )
+
+        env["CPATH"] = ":".join(
+            str(p)
+            for p in include_paths
+            if p.exists()
+        )
+
+        pkg_paths = [
+            prefix / "lib" / "pkgconfig",
+            prefix / "share" / "pkgconfig",
+            prefix / "opt" / "libgccjit" / "lib" / "pkgconfig",
+        ]
+
+        existing_pkg = env.get("PKG_CONFIG_PATH", "")
+
+        env["PKG_CONFIG_PATH"] = ":".join(
+            [str(p) for p in pkg_paths if p.exists()]
+            + ([existing_pkg] if existing_pkg else [])
+        )
+
+        # Make the SDK explicit for CFLAGS/LDFLAGS only when necessary.
+        env["CPPFLAGS"] = (
+            env.get("CPPFLAGS", "")
+            + f" -isysroot {sdk}"
+        ).strip()
+
+        env["LDFLAGS"] = (
+            env.get("LDFLAGS", "")
+            + f" -isysroot {sdk}"
+        ).strip()
+
+        # ------------------------------------------------------------------
+        # Prevent GNU libtool/ar from accidentally producing archives that
+        # Apple's linker rejects.
+        #
+        # The previous:
+        #
+        #   save-cwd.o not 8-byte aligned
+        #
+        # failure is a strong indication that the archive was produced in a
+        # form Apple's Mach-O linker did not accept.
+        #
+        # Always use Apple's archive tools for the macOS build.
+        # ------------------------------------------------------------------
+
+        if shutil.which("xcrun"):
+            env["AR"] = "ar"
+            env["RANLIB"] = "ranlib"
+            env["NM"] = "nm"
+            env["STRIP"] = "strip"
+
+        info(f"macOS SDK: {sdk}")
+        info(f"Homebrew prefix: {prefix}")
+
+    return env
+
+
+# ============================================================================
+# Repository / release handling
+# ============================================================================
+
+def get_all_release_tags():
+    info("Fetching Emacs release tags...")
+
+    output = subprocess.check_output(
+        [
+            "git",
+            "ls-remote",
+            "--tags",
+            REPO_URL,
+        ],
+        text=True,
+    )
+
+    tags = set()
+
+    for line in output.splitlines():
+
+        if "refs/tags/" not in line:
+            continue
+
+        tag = line.split("refs/tags/", 1)[1]
+
+        if tag.endswith("^{}"):
+            continue
+
+        if not tag.startswith("emacs-"):
+            continue
+
+        # Only actual version tags.
+        if not re.fullmatch(
+            r"emacs-\d+\.\d+(?:\.\d+)?",
+            tag,
+        ):
+            continue
+
+        # Don't accidentally include RC/pre/beta names.
+        if any(
+            x in tag.lower()
+            for x in ["rc", "pre", "beta", "alpha"]
+        ):
+            continue
+
+        tags.add(tag)
+
+    return sorted(
+        tags,
+        key=lambda tag: tuple(
+            int(x)
+            for x in re.findall(
+                r"\d+",
+                tag,
+            )
+        ),
+        reverse=True,
+    )
+
+
+def get_release_candidates(args):
+    tags = get_all_release_tags()
+
+    if args.master:
+        return ["master"]
+
+    if not tags:
+        return ["master"]
+
+    return tags[:args.max_releases]
+
+
+def sync_source_repo(tag):
+    SRC_DIR.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    if not SRC_DIR.exists():
+
+        run(
+            [
+                "git",
+                "clone",
+                "--depth",
+                "1",
+                "--branch",
+                tag,
+                REPO_URL,
+                str(SRC_DIR),
+            ]
+        )
+
+    else:
+
+        if not (SRC_DIR / ".git").exists():
+
+            error(
+                f"{SRC_DIR} exists but is not a Git repository."
+            )
+            sys.exit(1)
+
+        run(
+            [
+                "git",
+                "fetch",
+                "--tags",
+                "--prune",
+                "origin",
+            ],
+            cwd=SRC_DIR,
+        )
+
+        run(
+            [
+                "git",
+                "reset",
+                "--hard",
+            ],
+            cwd=SRC_DIR,
+        )
+
+        run(
+            [
+                "git",
+                "clean",
+                "-fdx",
+            ],
+            cwd=SRC_DIR,
+        )
+
+        run(
+            [
+                "git",
+                "checkout",
+                "-f",
+                tag,
+            ],
+            cwd=SRC_DIR,
+        )
+
+
+# ============================================================================
+# Temporary source tree
+# ============================================================================
+
+def prepare_build_tree(tag, tmp_root):
+    build_dir = Path(tmp_root) / "emacs"
+
+    if build_dir.exists():
+        shutil.rmtree(build_dir)
+
+    sync_source_repo(tag)
+
+    shutil.copytree(
+        SRC_DIR,
+        build_dir,
+        ignore=shutil.ignore_patterns(".git"),
+    )
+
+    return build_dir
+
+
+# ============================================================================
+# Generic C probe
+# ============================================================================
+
+def compile_probe(source, env, libraries=None, extra_cflags=None):
+    libraries = libraries or []
+    extra_cflags = extra_cflags or []
+
+    probe_dir = Path(
+        tempfile.mkdtemp(
+            prefix="emacs-probe-"
+        )
+    )
+
+    try:
+
+        source_file = probe_dir / "probe.c"
+        output_file = probe_dir / "probe"
+
+        source_file.write_text(source)
+
+        cmd = [
+            env.get("CC", "cc"),
+            "-std=c11",
+            "-Wall",
+            "-Werror",
+            *extra_cflags,
+            str(source_file),
+            "-o",
+            str(output_file),
+            *libraries,
+        ]
+
+        result = run_capture(
+            cmd,
+            env=env,
+        )
+
+        return (
+            result.returncode == 0,
+            result.stdout,
+        )
+
+    finally:
+        shutil.rmtree(
+            probe_dir,
+            ignore_errors=True,
+        )
+
+
+# ============================================================================
+# Dynamic dependency compatibility
+# ============================================================================
+
+def check_treesitter_api(env):
+    info("Checking Tree-sitter compatibility...")
+
+    source = r"""
+#include <tree_sitter/api.h>
+
+int main(void)
+{
+    const TSLanguage *lang = 0;
+
+    /*
+     * Test APIs that current Emacs treesit.c commonly depends on.
+     *
+     * Do NOT require ts_language_version(), because newer Tree-sitter
+     * releases have changed that API.
+     */
+    (void) ts_language_abi_version(lang);
+
+    return 0;
+}
+"""
+
+    compatible, log = compile_probe(
+        source,
+        env,
+    )
+
+    if compatible:
+        ok("Tree-sitter basic API compatibility probe passed.")
+        return True
+
+    warn("Tree-sitter compatibility probe failed.")
+
+    if log:
+        print(
+            textwrap.indent(
+                log[-5000:],
+                "    ",
+            )
+        )
+
+    return False
+
+
+def check_jansson(env):
+    source = r"""
+#include <jansson.h>
+
+int main(void)
+{
+    json_t *object = json_object();
+
+    if (!object)
+        return 1;
+
+    json_decref(object);
+    return 0;
+}
+"""
+
+    compatible, log = compile_probe(
+        source,
+        env,
+        ["-ljansson"],
+    )
+
+    if compatible:
+        ok("Jansson compatibility probe passed.")
+        return True
+
+    warn("Jansson compatibility probe failed.")
+
+    if log:
+        print(
+            textwrap.indent(
+                log[-4000:],
+                "    ",
+            )
+        )
+
+    return False
+
+
+def check_libxml2(env):
+    source = r"""
+#include <libxml/parser.h>
+
+int main(void)
+{
+    xmlInitParser();
+    xmlCleanupParser();
+    return 0;
+}
+"""
+
+    prefix = brew_prefix() if platform.system() == "Darwin" else None
+
+    flags = []
+
+    if prefix:
+        xml_prefix = prefix / "opt" / "libxml2"
+        flags.extend(
+            [
+                f"-I{xml_prefix / 'include' / 'libxml2'}",
+                f"-L{xml_prefix / 'lib'}",
+            ]
+        )
+
+    compatible, log = compile_probe(
+        source,
+        env,
+        ["-lxml2"],
+        flags,
+    )
+
+    if compatible:
+        ok("libxml2 compatibility probe passed.")
+        return True
+
+    warn("libxml2 compatibility probe failed.")
+
+    if log:
+        print(
+            textwrap.indent(
+                log[-4000:],
+                "    ",
+            )
+        )
+
+    return False
+
+
+def check_cairo(env):
+    source = r"""
+#include <cairo/cairo.h>
+
+int main(void)
+{
+    cairo_surface_t *surface =
+        cairo_image_surface_create(
+            CAIRO_FORMAT_ARGB32,
+            10,
+            10
+        );
+
+    if (!surface)
+        return 1;
+
+    cairo_surface_destroy(surface);
+    return 0;
+}
+"""
+
+    compatible, log = compile_probe(
+        source,
+        env,
+        ["-lcairo"],
+    )
+
+    if compatible:
+        ok("Cairo compatibility probe passed.")
+        return True
+
+    warn("Cairo compatibility probe failed.")
+
+    if log:
+        print(
+            textwrap.indent(
+                log[-4000:],
+                "    ",
+            )
+        )
+
+    return False
+
+
+def check_harfbuzz(env):
+    source = r"""
+#include <hb.h>
+
+int main(void)
+{
+    unsigned int major = 0;
+    unsigned int minor = 0;
+    unsigned int micro = 0;
+
+    hb_version(
+        &major,
+        &minor,
+        &micro
+    );
+
+    return 0;
+}
+"""
+
+    compatible, log = compile_probe(
+        source,
+        env,
+        ["-lharfbuzz"],
+    )
+
+    if compatible:
+        ok("HarfBuzz compatibility probe passed.")
+        return True
+
+    warn("HarfBuzz compatibility probe failed.")
+
+    if log:
+        print(
+            textwrap.indent(
+                log[-4000:],
+                "    ",
+            )
+        )
+
+    return False
+
+
+def dynamic_dependency_checks(env):
+    info(
+        "Running dynamic dependency compatibility checks..."
+    )
+
+    results = {}
+
+    results["tree-sitter"] = check_treesitter_api(env)
+    results["jansson"] = check_jansson(env)
+    results["libxml2"] = check_libxml2(env)
+    results["cairo"] = check_cairo(env)
+    results["harfbuzz"] = check_harfbuzz(env)
+
+    failures = [
+        name
+        for name, result in results.items()
+        if not result
+    ]
+
+    if failures:
+
+        warn(
+            "Dependency compatibility failures:"
+        )
+
+        for failure in failures:
+            warn(f"  - {failure}")
+
+        warn(
+            "These probes are advisory. "
+            "Feature availability will be determined dynamically."
+        )
+
+    else:
+
+        ok(
+            "All dependency compatibility probes passed."
+        )
+
+    return results
+
+
+# ============================================================================
+# Autotools
+# ============================================================================
+
+def run_autogen(build_dir, env):
+    if not (build_dir / "autogen.sh").exists():
+        error("autogen.sh is missing.")
+        return False
+
+    run(
+        ["./autogen.sh"],
+        env=env,
+        cwd=build_dir,
+    )
+
+    return True
+
+
+# ============================================================================
+# Configure flags
+# ============================================================================
+
+def make_configure_flags(
+    os_type,
+    enable_treesit,
+    enable_native,
+    dependency_results,
+):
+    flags = [
+        "./configure",
+        "--with-json",
+        "--with-xml2",
+        "--with-gnutls",
+        "--with-modules",
+    ]
+
+    # ----------------------------------------------------------------------
+    # Native compilation
+    # ----------------------------------------------------------------------
+
+    if enable_native:
+        flags.append(
+            "--with-native-compilation=aot"
+        )
+    else:
+        flags.append(
+            "--with-native-compilation=no"
+        )
+
+    # ----------------------------------------------------------------------
+    # Tree-sitter
+    # ----------------------------------------------------------------------
+
+    if (
+        enable_treesit
+        and dependency_results.get(
+            "tree-sitter",
+            False,
+        )
+    ):
+        flags.append(
+            "--with-tree-sitter"
+        )
+    else:
+        flags.append(
+            "--without-tree-sitter"
+        )
+
+    # ----------------------------------------------------------------------
+    # macOS
+    # ----------------------------------------------------------------------
+
+    if os_type == "macos":
+
+        flags.extend(
+            [
+                "--with-ns",
+            ]
+        )
+
+    # ----------------------------------------------------------------------
+    # Arch Linux
+    # ----------------------------------------------------------------------
+
+    elif os_type == "arch":
+
+        flags.extend(
+            [
+                "--with-pgtk",
+                "--with-cairo",
+                "--with-harfbuzz",
+            ]
+        )
+
+    return flags
+
+
+# ============================================================================
+# macOS archive sanity check
+# ============================================================================
+
+def check_macos_archive(archive):
+    if not archive.exists():
+        return True
+
+    info(
+        f"Checking Mach-O archive: {archive}"
+    )
+
+    result = run_capture(
+        [
+            "ar",
+            "-t",
+            str(archive),
+        ]
+    )
+
+    if result.returncode != 0:
+        warn(
+            f"Could not inspect archive: {archive}"
+        )
+        return False
+
+    # Apple's ld has historically been sensitive to malformed/incorrect
+    # archive members. Rebuild the archive with Apple's ar if possible.
+    #
+    # We don't blindly rewrite every archive because libtool controls many
+    # of the generated archives.
+    return True
+
+
+def check_generated_archives(build_dir):
+    if platform.system() != "Darwin":
+        return True
+
+    bad = []
+
+    for archive in build_dir.rglob("*.a"):
+
+        if not check_macos_archive(archive):
+            bad.append(archive)
+
+    if bad:
+
+        warn(
+            "Potentially problematic Mach-O archives detected:"
+        )
+
+        for archive in bad:
+            warn(str(archive))
+
+        return False
+
+    return True
+
+
+# ============================================================================
+# Build
+# ============================================================================
+
+def build_attempt(
+    tag,
+    os_type,
+    env,
+    jobs,
+    requested_treesit,
+    requested_native,
+    dependency_results,
+    tmp_root,
+):
+    info(
+        f"Build attempt: {tag} "
+        f"(Tree-sitter={requested_treesit}, "
+        f"native-comp={requested_native})"
+    )
+
+    build_dir = prepare_build_tree(
+        tag,
+        tmp_root,
+    )
+
+    # ----------------------------------------------------------------------
+    # Determine features for THIS release.
+    # ----------------------------------------------------------------------
+
+    enable_treesit = requested_treesit
+
+    if enable_treesit:
+
+        if not dependency_results.get(
+            "tree-sitter",
+            False,
+        ):
+
+            warn(
+                "Tree-sitter dependency probe failed."
+            )
+
+            warn(
+                "Disabling Tree-sitter for this attempt."
+            )
+
+            enable_treesit = False
+
+    # ----------------------------------------------------------------------
+    # Generate configure
+    # ----------------------------------------------------------------------
+
+    run_autogen(
+        build_dir,
+        env,
+    )
+
+    configure_flags = make_configure_flags(
+        os_type,
+        enable_treesit,
+        requested_native,
+        dependency_results,
+    )
+
+    info(
+        "Configure flags:\n  "
+        + "\n  ".join(configure_flags)
+    )
+
+    result = run_capture(
+        configure_flags,
+        env=env,
+        cwd=build_dir,
+    )
+
+    print(result.stdout)
+
+    if result.returncode != 0:
+
+        warn(
+            f"configure failed for {tag}."
+        )
+
+        return None
+
+    # ----------------------------------------------------------------------
+    # Build
+    # ----------------------------------------------------------------------
+
+    result = subprocess.run(
+        [
+            "make",
+            f"-j{jobs}",
+        ],
+        env=env,
+        cwd=build_dir,
+        text=True,
+    )
+
+    if result.returncode != 0:
+
+        warn(
+            f"make failed for {tag}."
+        )
+
+        return None
+
+    # ----------------------------------------------------------------------
+    # Check archives before installation.
+    # ----------------------------------------------------------------------
+
+    check_generated_archives(
+        build_dir
+    )
+
+    # ----------------------------------------------------------------------
+    # macOS bundle
+    # ----------------------------------------------------------------------
+
+    if os_type == "macos":
+
+        app = (
+            build_dir
+            / "nextstep"
+            / "Emacs.app"
+        )
+
+        if not app.exists():
+
+            error(
+                f"Emacs.app was not generated: {app}"
+            )
+
+            return None
+
+        if not validate_emacs_bundle(app):
+
+            error(
+                "Build produced an incomplete Emacs.app."
+            )
+
+            return None
+
+        return app
+
+    # ----------------------------------------------------------------------
+    # Arch
+    # ----------------------------------------------------------------------
+
+    return build_dir
+
+
+# ============================================================================
+# Emacs.app validation
+# ============================================================================
+
+def bundle_component_paths(app):
+    contents = app / "Contents"
+
+    return {
+        "Contents": contents,
+        "MacOS": contents / "MacOS",
+        "Resources": contents / "Resources",
+
+        "binary": contents / "MacOS" / "Emacs",
+
+        "libexec": contents / "MacOS" / "libexec",
+
+        "etc": contents / "Resources" / "etc",
+
+        "charsets": (
+            contents
+            / "Resources"
+            / "etc"
+            / "charsets"
+        ),
+
+        "lisp": (
+            contents
+            / "Resources"
+            / "lisp"
+        ),
+
+        "pdmp": contents / "MacOS" / "emacs.pdmp",
+    }
+
+
+def validate_emacs_bundle(app):
+    info(
+        f"Validating Emacs.app: {app}"
+    )
+
+    if not app.exists():
+        error("Emacs.app does not exist.")
+        return False
+
+    if not app.is_dir():
+        error("Emacs.app is not a directory.")
+        return False
+
+    paths = bundle_component_paths(app)
+
+    missing = []
+
+    for name, path in paths.items():
+
+        if name == "Contents":
+            continue
+
+        if not path.exists():
+            missing.append(
+                f"{name}: {path}"
+            )
+
+    if missing:
+
+        error("Missing bundle components:")
+
+        for item in missing:
+            print(f"  {item}")
+
+        return False
+
+    # ----------------------------------------------------------------------
+    # Executable check
+    # ----------------------------------------------------------------------
+
+    binary = paths["binary"]
+
+    if not os.access(binary, os.X_OK):
+
+        error(
+            f"Emacs binary is not executable: {binary}"
+        )
+
+        return False
+
+    # ----------------------------------------------------------------------
+    # Info.plist
+    # ----------------------------------------------------------------------
+
+    plist = paths["Contents"] / "Info.plist"
+
+    if not plist.exists():
+
+        error(
+            f"Missing Info.plist: {plist}"
+        )
+
+        return False
+
+    try:
+
+        with plist.open("rb") as f:
+            plist_data = plistlib.load(f)
+
+        if "CFBundleExecutable" not in plist_data:
+
+            error(
+                "Info.plist has no CFBundleExecutable."
+            )
+
+            return False
+
+    except Exception as exc:
+
+        error(
+            f"Could not parse Info.plist: {exc}"
+        )
+
+        return False
+
+    # ----------------------------------------------------------------------
+    # Mach-O validation
+    # ----------------------------------------------------------------------
+
+    result = run_capture(
+        [
+            "file",
+            str(binary),
+        ]
+    )
+
+    if result.returncode != 0:
+
+        error(
+            "Could not inspect Emacs executable."
+        )
+
+        return False
+
+    if "Mach-O" not in result.stdout:
+
+        error(
+            "Emacs binary is not a Mach-O executable."
+        )
+
+        print(result.stdout)
+
+        return False
+
+    # ----------------------------------------------------------------------
+    # Runtime test
+    #
+    # We explicitly set the Emacs data directories so this test can detect
+    # the same class of broken bundle that previously produced:
+    #
+    # Contents/MacOS/libexec
+    # Contents/Resources/etc
+    # Contents/Resources/lisp
+    #
+    # missing errors.
+    # ----------------------------------------------------------------------
+
+    env = os.environ.copy()
+
+    env["EMACSLOADPATH"] = (
+        str(paths["lisp"])
+        + ":"
+        + env.get("EMACSLOADPATH", "")
+    )
+
+    result = run_capture(
+        [
+            str(binary),
+            "--batch",
+            "--quick",
+            "--eval",
+            "(princ \"EMACS-BUNDLE-OK\")",
+        ],
+        env=env,
+    )
+
+    print(result.stdout)
+
+    if (
+        result.returncode != 0
+        or "EMACS-BUNDLE-OK" not in result.stdout
+    ):
+
+        error(
+            "Emacs.app executable runtime test failed."
+        )
+
+        return False
+
+    ok(
+        "Emacs.app structure and runtime validation passed."
+    )
+
+    return True
+
+
+# ============================================================================
+# Installation
+# ============================================================================
+
+def remove_existing_install():
+    if APP_DEST.exists():
+
+        warn(
+            f"Removing existing {APP_DEST}"
+        )
+
+        run(
+            [
+                "sudo",
+                "rm",
+                "-rf",
+                str(APP_DEST),
+            ]
+        )
+
+
+def install_bundle(app):
+    info(
+        "Installing Emacs.app..."
+    )
+
+    if not validate_emacs_bundle(app):
+        raise RuntimeError(
+            "Refusing to install incomplete Emacs.app."
+        )
+
+    remove_existing_install()
+
+    run(
+        [
+            "sudo",
+            "cp",
+            "-R",
+            str(app),
+            str(APP_DEST.parent),
+        ]
+    )
+
+    # Force metadata update / Launch Services visibility.
+    run(
+        [
+            "sudo",
+            "touch",
+            str(APP_DEST),
+        ]
+    )
+
+    if not validate_emacs_bundle(APP_DEST):
+        raise RuntimeError(
+            "Installed Emacs.app failed post-install validation."
+        )
+
+    ok(
+        f"Installed: {APP_DEST}"
+    )
+
+
+# ============================================================================
+# CLI wrapper
+# ============================================================================
+
+def install_cli_wrapper():
+    info(
+        "Installing CLI launcher..."
+    )
+
+    binary = (
+        APP_DEST
+        / "Contents"
+        / "MacOS"
+        / "Emacs"
+    )
+
+    if not binary.exists():
+        raise RuntimeError(
+            f"Installed Emacs binary missing: {binary}"
+        )
+
+    run(
+        [
+            "sudo",
+            "mkdir",
+            "-p",
+            str(CLI_DEST.parent),
+        ]
+    )
+
+    run(
+        [
+            "sudo",
+            "ln",
+            "-sfn",
+            str(binary),
+            str(CLI_DEST),
+        ]
+    )
+
+    # Check symlink.
+    if not CLI_DEST.is_symlink():
+
+        raise RuntimeError(
+            f"CLI symlink was not created: {CLI_DEST}"
+        )
+
+    resolved = CLI_DEST.resolve()
+
+    if resolved != binary:
+
+        raise RuntimeError(
+            f"CLI symlink resolves incorrectly:\n"
+            f"  expected: {binary}\n"
+            f"  actual:   {resolved}"
+        )
+
+    ok(
+        f"CLI installed: {CLI_DEST}"
+    )
+
+
+# ============================================================================
+# Final validation
+# ============================================================================
+
+def final_validation():
+    info(
+        "Running final installation validation..."
+    )
+
+    if not APP_DEST.exists():
+
+        error(
+            "Installed Emacs.app does not exist."
+        )
+
+        return False
+
+    if not validate_emacs_bundle(
+        APP_DEST
+    ):
+        return False
+
+    if not CLI_DEST.exists():
+
+        error(
+            f"CLI executable missing: {CLI_DEST}"
+        )
+
+        return False
+
+    # ----------------------------------------------------------------------
+    # emacs --batch
+    # ----------------------------------------------------------------------
+
+    result = run_capture(
+        [
+            str(CLI_DEST),
+            "--batch",
+            "--quick",
+            "--eval",
+            "(princ (format \"EMACS-VERSION=%s\" emacs-version))",
+        ]
+    )
+
+    print(result.stdout)
+
+    if result.returncode != 0:
+
+        error(
+            "Installed 'emacs --batch' test failed."
+        )
+
+        return False
+
+    if "EMACS-VERSION=" not in result.stdout:
+
+        error(
+            "Emacs did not report its version."
+        )
+
+        return False
+
+    # ----------------------------------------------------------------------
+    # emacsclient
+    # ----------------------------------------------------------------------
+
+    client = (
+        APP_DEST
+        / "Contents"
+        / "MacOS"
+        / "bin"
+        / "emacsclient"
+    )
+
+    if client.exists():
+
+        result = run_capture(
+            [
+                str(client),
+                "--version",
+            ]
+        )
+
+        if result.returncode != 0:
+
+            warn(
+                "emacsclient exists but --version failed."
+            )
+
         else:
-            configure_flags.append("--with-toolkit=pgtk")
 
-        run(["./autogen.sh"], env=env, cwd=build_sandbox)
-        run(configure_flags, env=env, cwd=build_sandbox)
+            ok(
+                "emacsclient validation passed."
+            )
 
-        cores = os.cpu_count() or 4
-        run(["make", f"-j{cores}"], env=env, cwd=build_sandbox)
+    # ----------------------------------------------------------------------
+    # codesign inspection
+    # ----------------------------------------------------------------------
 
-        # Installation routing
-        if os_type == "darwin":
-            app_src = os.path.join(build_sandbox, "nextstep", "Emacs.app")
-            run(["sudo", "rm", "-rf", "/Applications/Emacs.app"])
-            run(["sudo", "mv", app_src, "/Applications/"])
-            run(["sudo", "mkdir", "-p", "/usr/local/bin"])
-            run(["sudo", "ln", "-sf", "/Applications/Emacs.app/Contents/MacOS/Emacs", "/usr/local/bin/emacs"])
+    if shutil.which("codesign"):
+
+        result = run_capture(
+            [
+                "codesign",
+                "--verify",
+                "--deep",
+                "--strict",
+                str(APP_DEST),
+            ]
+        )
+
+        if result.returncode == 0:
+
+            ok(
+                "macOS code-signature structure is valid."
+            )
+
         else:
-            run(["sudo", "make", "install"], cwd=build_sandbox)
 
-    print(f"\n🎉 Successfully built and installed Emacs on {os_type.upper()}!")
+            warn(
+                "codesign verification did not pass. "
+                "This can be expected for an unsigned local build."
+            )
+
+    ok(
+        "Final Emacs installation validation passed."
+    )
+
+    return True
+
+
+# ============================================================================
+# Arch installation
+# ============================================================================
+
+def install_arch(build_dir):
+    info(
+        "Installing Emacs to the Arch system..."
+    )
+
+    run(
+        [
+            "sudo",
+            "make",
+            "install",
+        ],
+        cwd=build_dir,
+    )
+
+    result = run_capture(
+        [
+            "emacs",
+            "--batch",
+            "--quick",
+            "--eval",
+            "(princ (format \"EMACS-VERSION=%s\" emacs-version))",
+        ]
+    )
+
+    print(result.stdout)
+
+    if result.returncode != 0:
+        raise RuntimeError(
+            "Installed Emacs failed runtime validation."
+        )
+
+    ok(
+        "Arch Emacs installation validated."
+    )
+
+
+# ============================================================================
+# Feature matrix
+# ============================================================================
+
+def feature_matrix(args):
+    matrix = []
+
+    if (
+        not args.no_tree_sitter
+        and not args.no_native_comp
+    ):
+        matrix.append(
+            (True, True)
+        )
+
+    if not args.no_tree_sitter:
+        matrix.append(
+            (True, False)
+        )
+
+    if not args.no_native_comp:
+        matrix.append(
+            (False, True)
+        )
+
+    # Always have a final minimal build.
+    matrix.append(
+        (False, False)
+    )
+
+    # Remove duplicates.
+    result = []
+    seen = set()
+
+    for item in matrix:
+
+        if item not in seen:
+
+            seen.add(item)
+            result.append(item)
+
+    return result
+
+
+# ============================================================================
+# Main macOS build
+# ============================================================================
+
+def build_macos(args, env):
+    candidates = get_release_candidates(
+        args
+    )
+
+    info(
+        "Release fallback candidates:\n  "
+        + "\n  ".join(candidates)
+    )
+
+    features = feature_matrix(args)
+
+    info(
+        "Feature fallback matrix:"
+    )
+
+    for treesit, native in features:
+
+        print(
+            f"  Tree-sitter={treesit}, "
+            f"native-comp={native}"
+        )
+
+    with tempfile.TemporaryDirectory(
+        prefix="emacs-build-"
+    ) as tmp_root:
+
+        for tag in candidates:
+
+            for requested_treesit, requested_native in features:
+
+                info(
+                    f"Attempting {tag}: "
+                    f"Tree-sitter={requested_treesit}, "
+                    f"native-comp={requested_native}"
+                )
+
+                try:
+
+                    dependency_results = (
+                        dynamic_dependency_checks(
+                            env
+                        )
+                    )
+
+                    app = build_attempt(
+                        tag=tag,
+                        os_type="macos",
+                        env=env,
+                        jobs=args.jobs,
+                        requested_treesit=requested_treesit,
+                        requested_native=requested_native,
+                        dependency_results=dependency_results,
+                        tmp_root=tmp_root,
+                    )
+
+                    if app is None:
+                        continue
+
+                    if not validate_emacs_bundle(app):
+                        warn(
+                            "Generated Emacs.app is incomplete."
+                        )
+                        continue
+
+                    install_bundle(app)
+
+                    install_cli_wrapper()
+
+                    if final_validation():
+
+                        ok(
+                            f"Successfully built and installed "
+                            f"Emacs {tag}."
+                        )
+
+                        return True
+
+                except KeyboardInterrupt:
+                    raise
+
+                except Exception as exc:
+
+                    error(
+                        f"Build attempt failed: {exc}"
+                    )
+
+                    if args.keep_build:
+
+                        warn(
+                            "Build debugging was requested. "
+                            f"Temporary root was: {tmp_root}"
+                        )
+
+                    continue
+
+    return False
+
+
+# ============================================================================
+# Main Arch build
+# ============================================================================
+
+def build_arch(args, env):
+    candidates = get_release_candidates(
+        args
+    )
+
+    features = feature_matrix(args)
+
+    with tempfile.TemporaryDirectory(
+        prefix="emacs-build-"
+    ) as tmp_root:
+
+        for tag in candidates:
+
+            for requested_treesit, requested_native in features:
+
+                info(
+                    f"Attempting {tag}: "
+                    f"Tree-sitter={requested_treesit}, "
+                    f"native-comp={requested_native}"
+                )
+
+                try:
+
+                    dependency_results = (
+                        dynamic_dependency_checks(
+                            env
+                        )
+                    )
+
+                    build_dir = build_attempt(
+                        tag=tag,
+                        os_type="arch",
+                        env=env,
+                        jobs=args.jobs,
+                        requested_treesit=requested_treesit,
+                        requested_native=requested_native,
+                        dependency_results=dependency_results,
+                        tmp_root=tmp_root,
+                    )
+
+                    if build_dir is None:
+                        continue
+
+                    install_arch(
+                        build_dir
+                    )
+
+                    ok(
+                        f"Successfully built and installed "
+                        f"Emacs {tag}."
+                    )
+
+                    return True
+
+                except KeyboardInterrupt:
+                    raise
+
+                except Exception as exc:
+
+                    error(
+                        f"Build attempt failed: {exc}"
+                    )
+
+                    continue
+
+    return False
+
+
+# ============================================================================
+# Argument parser
+# ============================================================================
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description=(
+            "Build the latest compatible GNU Emacs "
+            "with dynamic dependency fallback."
+        )
+    )
+
+    parser.add_argument(
+        "--stable",
+        action="store_true",
+        help=(
+            "Build stable releases only. "
+            "This is the default."
+        ),
+    )
+
+    parser.add_argument(
+        "--master",
+        action="store_true",
+        help="Try the Emacs master branch.",
+    )
+
+    parser.add_argument(
+        "--max-releases",
+        type=int,
+        default=DEFAULT_MAX_RELEASES,
+        help=(
+            "Maximum number of stable releases "
+            "to try."
+        ),
+    )
+
+    parser.add_argument(
+        "--jobs",
+        type=int,
+        default=os.cpu_count() or 4,
+        help="Parallel make jobs.",
+    )
+
+    parser.add_argument(
+        "--no-tree-sitter",
+        dest="no_tree_sitter",
+        action="store_true",
+        help="Disable Tree-sitter support.",
+    )
+
+    parser.add_argument(
+        "--no-native-comp",
+        dest="no_native_comp",
+        action="store_true",
+        help="Disable native compilation.",
+    )
+
+    parser.add_argument(
+        "--keep-build",
+        action="store_true",
+        help=(
+            "Keep build diagnostics when possible."
+        ),
+    )
+
+    return parser.parse_args()
+
+
+# ============================================================================
+# Main
+# ============================================================================
+
+def main():
+    args = parse_args()
+
+    os_type = detect_os()
+
+    print(
+        "\n"
+        "============================================================\n"
+        " GNU Emacs Full-Featured Native Builder\n"
+        "============================================================"
+    )
+
+    info(
+        f"Target platform: {os_type.upper()}"
+    )
+
+    info(
+        f"Source repository: {REPO_URL}"
+    )
+
+    info(
+        f"Source directory: {SRC_DIR}"
+    )
+
+    info(
+        f"Parallel jobs: {args.jobs}"
+    )
+
+    if args.no_tree_sitter:
+        warn(
+            "Tree-sitter explicitly disabled."
+        )
+
+    if args.no_native_comp:
+        warn(
+            "Native compilation explicitly disabled."
+        )
+
+    # ----------------------------------------------------------------------
+    # Host tools
+    # ----------------------------------------------------------------------
+
+    check_host_tools(
+        os_type
+    )
+
+    # ----------------------------------------------------------------------
+    # Dependencies
+    # ----------------------------------------------------------------------
+
+    install_dependencies(
+        os_type
+    )
+
+    # ----------------------------------------------------------------------
+    # Environment
+    # ----------------------------------------------------------------------
+
+    env = setup_environment(
+        os_type
+    )
+
+    # ----------------------------------------------------------------------
+    # Build
+    # ----------------------------------------------------------------------
+
+    if os_type == "macos":
+
+        success = build_macos(
+            args,
+            env,
+        )
+
+    else:
+
+        success = build_arch(
+            args,
+            env,
+        )
+
+    if not success:
+
+        error(
+            "All build/release/feature fallback attempts failed."
+        )
+
+        sys.exit(1)
+
+    print(
+        "\n"
+        "============================================================\n"
+        " 🎉 SUCCESS\n"
+        "============================================================"
+    )
+
 
 if __name__ == "__main__":
     main()

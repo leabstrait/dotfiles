@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+set -e
+
+# =====================================================================
+# SETUP CLI TOOLS (macOS & Arch Linux Bootstrap)
+# =====================================================================
+
+echo "🚀 Starting CLI environment setup..."
+
+case "$(uname -s)" in
+    Darwin)
+        if ! command -v brew >/dev/null 2>&1; then
+            echo "❌ Homebrew is not installed. Please install Homebrew first: https://brew.sh"
+            exit 1
+        fi
+
+        echo "🛠️ Updating Homebrew..."
+        brew update
+
+        echo "📦 Installing GNU utilities, developer tools, and modern CLI enhancements..."
+        brew install \
+            coreutils \
+            findutils \
+            gnu-sed \
+            gnu-tar \
+            gawk \
+            grep \
+            make \
+            diffutils \
+            gzip \
+            ed \
+            gpatch \
+            binutils \
+            wdiff \
+            gnu-indent \
+            gnu-which \
+            gnu-getopt \
+            curl \
+            jpeg \
+            gcc \
+            libgccjit \
+            bat \
+            eza \
+            fzf \
+            starship
+
+        echo "💡 Note: Don't forget to run 'fzf --install' if you want shell key bindings configured by Homebrew."
+        ;;
+
+    Linux)
+        if [ -f /etc/arch-release ]; then
+            echo "🛠️ Installing core GNU stack and modern CLI tools via Pacman..."
+            sudo pacman -S --needed --noconfirm \
+                base-devel \
+                git \
+                curl \
+                coreutils \
+                findutils \
+                sed \
+                tar \
+                gawk \
+                grep \
+                make \
+                diffutils \
+                gzip \
+                ed \
+                patch \
+                binutils \
+                wdiff \
+                indent \
+                which \
+                util-linux \
+                gcc \
+                libgccjit \
+                bat \
+                eza \
+                fzf \
+                starship
+        else
+            echo "❌ Unsupported Linux distribution. This script is tailored for Arch Linux."
+            exit 1
+        fi
+        ;;
+    *)
+        echo "❌ Unsupported Operating System."
+        exit 1
+        ;;
+esac
+
+echo "🎉 Setup complete! Run your verification script or restart your shell to apply changes."

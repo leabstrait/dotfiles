@@ -16,7 +16,8 @@
         "editor.defaultFormatter": "charliermarsh.ruff"
     },
     "accessibility.signals.terminalBell": {
-        "sound": "on"
+        "sound": "off",
+        "announcement": "off"
     },
     "accessibility.signals.terminalCommandFailed": {
         "sound": "on"
@@ -94,7 +95,6 @@
     "terminal.integrated.cursorBlinking": true,
     "terminal.integrated.defaultProfile.windows": "PowerShell",
     "terminal.integrated.enablePersistentSessions": false,
-    "terminal.integrated.enableVisualBell": true,
     "terminal.integrated.fontFamily": "FiraCode Nerd Font",
     "terminal.integrated.profiles.linux": {
         "Aider AI": {
@@ -306,5 +306,7 @@
     "ruff.path": [
         "/usr/bin/ruff"
     ],
-    "ruff.trace.server": "verbose"
+    "ruff.trace.server": "verbose",
+    "window.customTitleBarVisibility": "never",
+    "terminal.integrated.enableVisualBell": true
 }

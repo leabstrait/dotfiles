@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+
+echo "--- Complete GNU Environment Verification ---"
+
+check_tool() {
+    local name="$1"
+    local cmd="$2"
+    if eval "$cmd" >/dev/null 2>&1; then
+        echo "✅ $name: Active / GNU"
+    else
+        echo "❌ $name: Inactive / Native BSD"
+    fi
+}
+
+if curl --version 2>&1 | grep -q "Features:"; then echo "✅ curl: Homebrew version active"; else echo "❌ curl: Native/BSD active"; fi
+if getopt --version 2>&1 | grep -q "getopt"; then echo "✅ getopt: GNU gnu-getopt active"; else echo "❌ getopt: Native/BSD active"; fi
+
+check_tool "coreutils (ls)" "command ls --version"
+check_tool "findutils (find)" "find --version"
+check_tool "gnu-sed (sed)" "sed --version"
+if tar --version 2>&1 | grep -q "GNU"; then echo "✅ gnu-tar (tar): GNU active"; else echo "❌ gnu-tar (tar): Native/BSD active"; fi
+if awk --version 2>&1 | grep -q "GNU"; then echo "✅ gawk (awk): GNU active"; else echo "❌ gawk (awk): Native/BSD active"; fi
+check_tool "grep (grep)" "grep --version"
+check_tool "make (make)" "make --version"
+if diff --version 2>&1 | grep -q "GNU diffutils"; then echo "✅ diffutils (diff): GNU active"; else echo "❌ diffutils (diff): Native/BSD active"; fi
+if gzip --version 2>&1 | grep -q "gzip"; then echo "✅ gzip (gzip): GNU active"; else echo "❌ gzip (gzip): Native/BSD active"; fi
+check_tool "ed (ed)" "ed --version"
+if patch --version 2>&1 | grep -q "GNU patch"; then echo "✅ gpatch (patch): GNU active"; else echo "❌ gpatch (patch): Native/BSD active"; fi
+
+if objdump --version 2>&1 | grep -q "GNU"; then echo "✅ binutils (objdump): GNU active"; else echo "❌ binutils (objdump): Native/BSD active"; fi
+if wdiff --version 2>&1 | grep -q "wdiff"; then echo "✅ wdiff (wdiff): GNU active"; else echo "❌ wdiff (wdiff): Not found / Inactive"; fi
+if indent --version 2>&1 | grep -q "GNU"; then echo "✅ gnu-indent (indent): GNU active"; else echo "❌ gnu-indent (indent): Native/BSD active"; fi
+if which --version 2>&1 | grep -q "GNU"; then echo "✅ gnu-which (which): GNU active"; else echo "❌ gnu-which (which): Native/BSD active"; fi
+
+echo "---------------------------------------------"
