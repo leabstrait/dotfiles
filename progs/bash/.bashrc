@@ -33,7 +33,7 @@ export LESS='-S -R -F --incsearch --mouse --use-color -Dd33.16 -Du33.16 -Ds43.16
 export LESS_TERMCAP_md="${LESS_MINT}"
 export LESS_TERMCAP_me="${LESS_RESET}"
 export LESS_TERMCAP_us="${LESS_BLUE}"
-expo`rt LESS_TERMCAP_ue="${LESS_RESET}"
+export LESS_TERMCAP_ue="${LESS_RESET}"
 export LESS_TERMCAP_so=$'\e[48;5;43;30m'
 export LESS_TERMCAP_se="${LESS_RESET}"
 
