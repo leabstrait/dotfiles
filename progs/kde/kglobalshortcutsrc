@@ -297,7 +297,7 @@ toggle do not disturb=none,none,Toggle do not disturb
 _launch=none
 
 [services][emacs.desktop]
-_launch=Meta+C
+_launch=none
 
 [services][firefox.desktop]
 _launch=Meta+E
