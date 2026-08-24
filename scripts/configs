@@ -68,7 +68,7 @@ def resolve_mapping_file(cmd, passed_args):
 def load_maps(map_file: Path):
     """Load config mappings safely using standard python configparser engine."""
     ensure_env(map_file)
-    config = configparser.ConfigParser(interpolation=None)
+    config = configparser.ConfigParser(interpolation=None, allow_no_value=True)
     config.optionxform = str  # Maintain strict case sensitivity
     try:
         config.read(map_file)
@@ -376,7 +376,7 @@ def update_repository_with_remote():
         else:
             print(f"✨ Target directory is untracked. Checking remote repository connection...")
             clone_res = subprocess.run(["git", "clone", CONFIGS_REPO_URL, str(CONFIGS_DIR)])
-            
+
             if clone_res.returncode != 0:
                 print("⚠️  Upstream repository cloning failed (does not exist or unauthorized).")
                 print(f"🔧 Creating a brand new local repository context at {CONFIGS_DIR}...")
@@ -386,7 +386,7 @@ def update_repository_with_remote():
                 print(f"✅ Repository initialized locally with origin configured to: {CONFIGS_REPO_URL}")
     except subprocess.CalledProcessError as git_err:
         print(f"❌ Error: Git execution management runtime error: {git_err}")
-            
+
 
 # ── App Execution Orchestrator Commands ─────────────────────────────────────────
 def main():
@@ -425,7 +425,7 @@ Commands:
 
     if cmd == "init-host":
         update_repository_with_remote()
-        
+
         current_host = socket.gethostname()
         host_dir = CONFIGS_DIR / "hosts" / current_host
         map_file = host_dir / "configs_map.cfg"
