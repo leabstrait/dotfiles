@@ -178,23 +178,13 @@
   (global-ligature-mode t))
 
 
-
-;; Check if init.el exists, if not, tangle init.org to produce init.el
-(let ((init-el (expand-file-name "init.el" user-emacs-directory))
-      (init-org (expand-file-name "init.org" user-emacs-directory)))
-  (when (file-exists-p init-org)
-    (require 'org)
-    (org-babel-tangle-file init-org init-el)
-    (message "Tangling %s to create missing %s" init-org init-el)))
-
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; ;; 3. Literate Configuration Load                                               ;;
-;; (let ((literate-config (expand-file-name "config.org" user-emacs-directory)))   ;;
-;;   (if (file-exists-p literate-config)                                           ;;
-;;       (org-babel-load-file literate-config)                                     ;;
-;;     (message "Warning: config.org file not found in %s" user-emacs-directory))) ;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+ ;; 3. Literate Configuration Load                                               ;;
+ (let ((literate-config (expand-file-name "config.org" user-emacs-directory)))   ;;
+   (if (file-exists-p literate-config)                                           ;;
+       (org-babel-load-file literate-config)                                     ;;
+     (message "Warning: config.org file not found in %s" user-emacs-directory))) ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
 ;; 4. Isolate Custom Variables
