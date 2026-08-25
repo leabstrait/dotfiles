@@ -1,6 +1,6 @@
-#+TITLE: Dynamic Emacs Environment (Modular Specification)
+#+TITLE: Emacs Configuration
 #+AUTHOR: Configuration Author
-#+PROPERTY: header-args:emacs-lisp :tangle init.el :results silent :lexical t
+#+PROPERTY: header-args:emacs-lisp :tangle yes :mkdirp yes
 
 * INTRODUCTION: THE EMACS KEYBIND PHILOSOPHY & STRUCTURE
 
@@ -41,8 +41,6 @@ When you press a key, Emacs filters your input through a strict map hierarchy. T
 #+BEGIN_SRC emacs-lisp
 ;; -*- lexical-binding: t; -*-
 
-(require 'package)
-
 (defun start/display-startup-time ()
   "Display Emacs startup time and number of garbage collections."
   (interactive)
@@ -54,27 +52,31 @@ When you press a key, Emacs filters your input through a strict map hierarchy. T
 
 (add-hook 'emacs-startup-hook #'start/display-startup-time)
 
+(require 'package)
+
 (setq package-archives
       '(("melpa" . "https://melpa.org/packages/")
         ("elpa" . "https://elpa.gnu.org/packages/")
         ("nongnu" . "https://elpa.nongnu.org/nongnu/")))
 
-(unless package-archive-contents
-  (package-refresh-contents))
-
-(setq package-quickstart t)
-(package-quickstart-refresh)
-
-(require 'use-package-ensure) ; Load use-package-always-ensure
-(setq use-package-always-ensure t) ; Always ensures that a package is installed
-
-(use-package async
-  :defer t
-  :custom
-  (dired-async-mode t)
-  (async-bytecomp-package-mode t)
-  (async-bytecomp-allowed-packages '(all))
-  (async-package-do-action t))
+(package-initialize)
+;;
+;;(unless package-archive-contents
+;;  (package-refresh-contents))
+;;
+;;(setq package-quickstart t)
+;;(package-quickstart-refresh)
+;;
+(require 'use-package-ensure)
+(setq use-package-always-ensure t)
+;;
+;;(use-package async
+;;  :defer t
+;;  :custom
+;;  (dired-async-mode t)
+;;  (async-bytecomp-package-mode t)
+;;  (async-bytecomp-allowed-packages '(all))
+;;  (async-package-do-action t))
 #+END_SRC
 
 * CORE EMACS BEHAVIOR
@@ -89,7 +91,7 @@ When you press a key, Emacs filters your input through a strict map hierarchy. T
   (scroll-bar-mode nil)       ; Disable the scroll bar
   (tool-bar-mode nil)         ; Disable the tool bar
 
-  ;;(inhibit-startup-screen t)  ; Disable welcome screen
+  (inhibit-startup-screen t)  ; Disable welcome screen
 
   (delete-selection-mode t)   ; Select text and delete it by typing.
   (electric-indent-mode nil)  ; Turn off the weird indenting that Emacs does by default.
@@ -105,9 +107,7 @@ When you press a key, Emacs filters your input through a strict map hierarchy. T
   ;; (context-menu-mode t) ; Right-click menu
   ;; (savehist-mode t) ; Enables save history mode
 
-  ;; (global-visual-line-mode t) ; Enable line wrapping (NOTE: breaks vundo)
   (global-display-line-numbers-mode t)
-  ;; (display-line-numbers-type 'relative) ; Relative line numbers
   (global-hl-line-mode t)
 
   (mouse-wheel-progressive-speed nil)
@@ -154,7 +154,6 @@ When you press a key, Emacs filters your input through a strict map hierarchy. T
 
 #+BEGIN_SRC emacs-lisp
 (use-package which-key
-  :ensure nil ; Don't install which-key because it's now built-in
   :hook (after-init . which-key-mode)
   :diminish
   :custom
@@ -170,15 +169,44 @@ When you press a key, Emacs filters your input through a strict map hierarchy. T
 ** Configuration Commands
 
 #+BEGIN_SRC emacs-lisp
-(defun start/open-init-file ()
-  "Open init.org configuration file."
+(defun start/tangle-config ()
+  "Tangle init.org into init.el."
   (interactive)
-  (find-file (expand-file-name "init.org" user-emacs-directory)))
+  (require 'org)
+  (let ((init-org
+         (expand-file-name "init.org" user-emacs-directory))
+        (init-el
+         (expand-file-name "init.el" user-emacs-directory)))
+
+    (unless (file-exists-p init-org)
+      (user-error "Cannot find %s" init-org))
+
+    (org-babel-tangle-file init-org init-el "emacs-lisp")
+
+    (message "Successfully tangled %s -> %s"
+             init-org
+             init-el)))
+
+(defun start/open-init-file ()
+  "Open the init.org configuration file."
+  (interactive)
+  (find-file
+   (expand-file-name "init.org" user-emacs-directory)))
 
 (defun start/reload-config ()
-  "Reload Emacs config."
+  "Tangle init.org and reload the generated init.el."
   (interactive)
-  (load-file (expand-file-name "init.el" user-emacs-directory)))
+
+  (save-some-buffers t)
+
+  (start/tangle-config)
+
+  (let ((init-el
+         (expand-file-name "init.el" user-emacs-directory)))
+
+    (load-file init-el)
+
+    (message "Configuration reloaded from init.org")))
 #+END_SRC
 
 ** Global Text Formatting & Indentation Defaults
@@ -223,76 +251,76 @@ Configures **FiraCode Nerd Font** at a compact, precise size (95/10pt) matching 
 
 #+BEGIN_SRC emacs-lisp
 (set-frame-font "FiraCode Nerd Font-10" nil t)
-(use-package ligature
-  :load-path "path-to-ligature-repo"
-  :config
-  ;; Enable the "www" ligature in every possible major mode
-  (ligature-set-ligatures 't '("www"))
-  ;; Enable traditional ligature support in eww-mode, if the
-  ;; `variable-pitch' face supports it
-  (ligature-set-ligatures 'eww-mode '("ff" "fi" "ffi"))
-  ;; Enable all Cascadia and Fira Code ligatures in programming modes
-  (ligature-set-ligatures 'prog-mode
-                        '(;; == === ==== => =| =>>=>=|=>==>> ==< =/=//=// =~
-                          ;; =:= =!=
-                          ("=" (rx (+ (or ">" "<" "|" "/" "~" ":" "!" "="))))
-                          ;; ;; ;;;
-                          (";" (rx (+ ";")))
-                          ;; && &&&
-                          ("&" (rx (+ "&")))
-                          ;; !! !!! !. !: !!. != !== !~
-                          ("!" (rx (+ (or "=" "!" "\." ":" "~"))))
-                          ;; ?? ??? ?:  ?=  ?.
-                          ("?" (rx (or ":" "=" "\." (+ "?"))))
-                          ;; %% %%%
-                          ("%" (rx (+ "%")))
-                          ;; |> ||> |||> ||||> |] |} || ||| |-> ||-||
-                          ;; |->>-||-<<-| |- |== ||=||
-                          ;; |==>>==<<==<=>==//==/=!==:===>
-                          ("|" (rx (+ (or ">" "<" "|" "/" ":" "!" "}" "\]"
-                                          "-" "=" ))))
-                          ;; \\ \\\ \/
-                          ("\\" (rx (or "/" (+ "\\"))))
-                          ;; ++ +++ ++++ +>
-                          ("+" (rx (or ">" (+ "+"))))
-                          ;; :: ::: :::: :> :< := :// ::=
-                          (":" (rx (or ">" "<" "=" "//" ":=" (+ ":"))))
-                          ;; // /// //// /\ /* /> /===:===!=//===>>==>==/
-                          ("/" (rx (+ (or ">"  "<" "|" "/" "\\" "\*" ":" "!"
-                                          "="))))
-                          ;; .. ... .... .= .- .? ..= ..<
-                          ("\." (rx (or "=" "-" "\?" "\.=" "\.<" (+ "\."))))
-                          ;; -- --- ---- -~ -> ->> -| -|->-->>->--<<-|
-                          ("-" (rx (+ (or ">" "<" "|" "~" "-"))))
-                          ;; *> */ *)  ** *** ****
-                          ("*" (rx (or ">" "/" ")" (+ "*"))))
-                          ;; www wwww
-                          ("w" (rx (+ "w")))
-                          ;; <> <!-- <|> <: <~ <~> <~~ <+ <* <$ </  <+> <*>
-                          ;; <$> </> <|  <||  <||| <|||| <- <-| <-<<-|-> <->>
-                          ;; <<-> <= <=> <<==<<==>=|=>==/==//=!==:=>
-                          ;; << <<< <<<<
-                          ("<" (rx (+ (or "\+" "\*" "\$" "<" ">" ":" "~"  "!"
-                                          "-"  "/" "|" "="))))
-                          ;; >: >- >>- >--|-> >>-|-> >= >== >>== >=|=:=>>
-                          ;; >> >>> >>>>
-                          (">" (rx (+ (or ">" "<" "|" "/" ":" "=" "-"))))
-                          ;; #: #= #! #( #? #[ #{ #_ #_( ## ### #####
-                          ("#" (rx (or ":" "=" "!" "(" "\?" "\[" "{" "_(" "_"
-                                       (+ "#"))))
-                          ;; ~~ ~~~ ~=  ~-  ~@ ~> ~~>
-                          ("~" (rx (or ">" "=" "-" "@" "~>" (+ "~"))))
-                          ;; __ ___ ____ _|_ __|____|_
-                          ("_" (rx (+ (or "_" "|"))))
-                          ;; Fira code: 0xFF 0x12
-                          ("0" (rx (and "x" (+ (in "A-F" "a-f" "0-9")))))
-                          ;; Fira code:
-                          "Fl"  "Tl"  "fi"  "fj"  "fl"  "ft"
-                          ;; The few not covered by the regexps.
-                          "{|"  "[|"  "]#"  "(*"  "}#"  "$>"  "^="))
-  ;; Enables ligature checks globally in all buffers. You can also do it
-  ;; per mode with `ligature-mode'.
-  (global-ligature-mode t))
+;;(use-package ligature
+;;  :load-path "path-to-ligature-repo"
+;;  :config
+;;  ;; Enable the "www" ligature in every possible major mode
+;;  (ligature-set-ligatures 't '("www"))
+;;  ;; Enable traditional ligature support in eww-mode, if the
+;;  ;; `variable-pitch' face supports it
+;;  (ligature-set-ligatures 'eww-mode '("ff" "fi" "ffi"))
+;;  ;; Enable all Cascadia and Fira Code ligatures in programming modes
+;;  (ligature-set-ligatures 'prog-mode
+;;                        '(;; == === ==== => =| =>>=>=|=>==>> ==< =/=//=// =~
+;;                          ;; =:= =!=
+;;                          ("=" (rx (+ (or ">" "<" "|" "/" "~" ":" "!" "="))))
+;;                          ;; ;; ;;;
+;;                          (";" (rx (+ ";")))
+;;                          ;; && &&&
+;;                          ("&" (rx (+ "&")))
+;;                          ;; !! !!! !. !: !!. != !== !~
+;;                          ("!" (rx (+ (or "=" "!" "\." ":" "~"))))
+;;                          ;; ?? ??? ?:  ?=  ?.
+;;                          ("?" (rx (or ":" "=" "\." (+ "?"))))
+;;                          ;; %% %%%
+;;                          ("%" (rx (+ "%")))
+;;                          ;; |> ||> |||> ||||> |] |} || ||| |-> ||-||
+;;                          ;; |->>-||-<<-| |- |== ||=||
+;;                          ;; |==>>==<<==<=>==//==/=!==:===>
+;;                          ("|" (rx (+ (or ">" "<" "|" "/" ":" "!" "}" "\]"
+;;                                          "-" "=" ))))
+;;                          ;; \\ \\\ \/
+;;                          ("\\" (rx (or "/" (+ "\\"))))
+;;                          ;; ++ +++ ++++ +>
+;;                          ("+" (rx (or ">" (+ "+"))))
+;;                          ;; :: ::: :::: :> :< := :// ::=
+;;                          (":" (rx (or ">" "<" "=" "//" ":=" (+ ":"))))
+;;                          ;; // /// //// /\ /* /> /===:===!=//===>>==>==/
+;;                          ("/" (rx (+ (or ">"  "<" "|" "/" "\\" "\*" ":" "!"
+;;                                          "="))))
+;;                          ;; .. ... .... .= .- .? ..= ..<
+;;                          ("\." (rx (or "=" "-" "\?" "\.=" "\.<" (+ "\."))))
+;;                          ;; -- --- ---- -~ -> ->> -| -|->-->>->--<<-|
+;;                          ("-" (rx (+ (or ">" "<" "|" "~" "-"))))
+;;                          ;; *> */ *)  ** *** ****
+;;                          ("*" (rx (or ">" "/" ")" (+ "*"))))
+;;                          ;; www wwww
+;;                          ("w" (rx (+ "w")))
+;;                          ;; <> <!-- <|> <: <~ <~> <~~ <+ <* <$ </  <+> <*>
+;;                          ;; <$> </> <|  <||  <||| <|||| <- <-| <-<<-|-> <->>
+;;                          ;; <<-> <= <=> <<==<<==>=|=>==/==//=!==:=>
+;;                          ;; << <<< <<<<
+;;                          ("<" (rx (+ (or "\+" "\*" "\$" "<" ">" ":" "~"  "!"
+;;                                          "-"  "/" "|" "="))))
+;;                          ;; >: >- >>- >--|-> >>-|-> >= >== >>== >=|=:=>>
+;;                          ;; >> >>> >>>>
+;;                          (">" (rx (+ (or ">" "<" "|" "/" ":" "=" "-"))))
+;;                          ;; #: #= #! #( #? #[ #{ #_ #_( ## ### #####
+;;                          ("#" (rx (or ":" "=" "!" "(" "\?" "\[" "{" "_(" "_"
+;;                                       (+ "#"))))
+;;                          ;; ~~ ~~~ ~=  ~-  ~@ ~> ~~>
+;;                          ("~" (rx (or ">" "=" "-" "@" "~>" (+ "~"))))
+;;                          ;; __ ___ ____ _|_ __|____|_
+;;                          ("_" (rx (+ (or "_" "|"))))
+;;                          ;; Fira code: 0xFF 0x12
+;;                          ("0" (rx (and "x" (+ (in "A-F" "a-f" "0-9")))))
+;;                          ;; Fira code:
+;;                          "Fl"  "Tl"  "fi"  "fj"  "fl"  "ft"
+;;                          ;; The few not covered by the regexps.
+;;                          "{|"  "[|"  "]#"  "(*"  "}#"  "$>"  "^="))
+;;  ;; Enables ligature checks globally in all buffers. You can also do it
+;;  ;; per mode with `ligature-mode'.
+;;  (global-ligature-mode t))
 #+END_SRC
 
 ** Dark Theme & Color Definitions
@@ -827,8 +855,7 @@ Automatically reload files when changed on disk by external applications.
 
 #+BEGIN_SRC emacs-lisp
 ;; Fixed the indent-bars crash by ensuring the compat dependency exists
-(use-package compat
-  :ensure t)
+(use-package compat)
 
 (use-package indent-bars
    :hook ((prog-mode yaml-mode conf-mode) . indent-bars-mode))
@@ -934,8 +961,8 @@ Install and configure the libgterm-backed terminal emulator for lightning-fast c
    :after vterm
   :bind ("C-c M-t" . multi-vterm))
 
-(use-package posframe
-  :ensure t)
+(use-package posframe)
+
 
 (use-package vterm-toggle
    :after (vterm posframe)
