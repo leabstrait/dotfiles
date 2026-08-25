@@ -23,15 +23,14 @@
 
 ;; Unset file-name-handler-alist
 ;; About 0.07 faster
-(defvar start/old-file-name-handler-alist
-  file-name-handler-alist)
+(defvar last-file-name-handler-alist file-name-handler-alist)
 
 (setq file-name-handler-alist nil)
 
 (add-hook 'after-init-hook
           (lambda ()
             (setq file-name-handler-alist
-                  start/old-file-name-handler-alist)))
+                  last-file-name-handler-alist)))
 
 ;; Fix white flash on startup
 ;; Don't do it when using daemon or terminal, because it messes up the background color.
@@ -50,7 +49,7 @@
 ;; Startup about 0.01 faster
 (set-face-attribute 'default nil
                     :font "FiraCode Nerd Font" ; Set your favorite type of font or download JetBrains Mono
-                    :height 100
+                    :height 110
                     :weight 'medium)
 ;; This sets the default font on all graphical frames created after restarting Emacs.
 ;; Does the same thing as 'set-face-attribute default' above, but emacsclient fonts
@@ -59,48 +58,3 @@
 (setq-default line-spacing 0.12)
 
 (prefer-coding-system 'utf-8)
-
-;; Tangle init.org to produce init.el
-
-;;(let ((init-org (expand-file-name "init.org" user-emacs-directory))
-;;      (init-el  (expand-file-name "init.el" user-emacs-directory)))
-;;
-;;  (when (and (file-exists-p init-org)
-;;             (or (not (file-exists-p init-el))
-;;                 (file-newer-than-file-p init-org init-el)))
-;;
-;;    (message "TANGLED: generating init.el from init.org")
-;;
-;;    (require 'org)
-;;    (require 'ob-tangle)
-;;
-;;    (org-babel-tangle-file init-org)
-;;
-;;    (message "TANGLED: finished generating init.el")))
-;; Tangle init.org -> init.el during startup.
-
-(let* ((init-org (expand-file-name "init.org" user-emacs-directory))
-       (init-el  (expand-file-name "init.el" user-emacs-directory)))
-
-  (message "EARLY-INIT: init.org = %s" init-org)
-  (message "EARLY-INIT: init.el  = %s" init-el)
-
-  (when (file-exists-p init-org)
-    (message "EARLY-INIT: init.org exists")
-
-    ;; Load Org and Babel's tangle support.
-    (require 'org)
-    (require 'ob-tangle)
-
-    (message "EARLY-INIT: org/ob-tangle loaded")
-    (message "EARLY-INIT: BEFORE TANGLE")
-
-    ;; Tangle.
-    (org-babel-tangle-file init-org init-el)
-
-    (message "EARLY-INIT: AFTER TANGLE")
-
-    (unless (file-exists-p init-el)
-      (error "EARLY-INIT: tangle completed but init.el was not created"))
-
-    (message "EARLY-INIT: generated init.el successfully")))
