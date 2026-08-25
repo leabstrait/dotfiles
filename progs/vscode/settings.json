@@ -308,5 +308,12 @@
     ],
     "ruff.trace.server": "verbose",
     "window.customTitleBarVisibility": "never",
-    "terminal.integrated.enableVisualBell": true
+    "terminal.integrated.enableVisualBell": true,
+    "editor.fontSize": 13,
+    "chat.editor.fontSize": 13,
+    "chat.fontSize": 13,
+    "debug.console.fontSize": 13,
+    "scm.inputFontSize": 13,
+    "terminal.integrated.fontSize": 13,
+    "markdown.preview.fontSize": 13
 }

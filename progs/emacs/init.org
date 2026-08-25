@@ -1,3 +1,44 @@
+#+TITLE: Dynamic Emacs Environment (Modular Specification)
+#+AUTHOR: Configuration Author
+#+PROPERTY: header-args:emacs-lisp :tangle init.el :results silent :lexical t
+
+* INTRODUCTION: THE EMACS KEYBIND PHILOSOPHY & STRUCTURE
+
+Unlike modern text editors that rely on a static set of shortcuts (like ~Ctrl+C~ for copy, ~Ctrl+V~ for paste), Emacs treats the keyboard as a fluent, modal command interface. Every single keypress or combination runs a discrete Lisp function under the hood.
+
+** The Core Input Philosophy
+
+The Emacs keyboard philosophy is designed around three core principles:
+
+1. *Touch-Typist Efficiency*: Standard shortcuts avoid the function keys (~F1~-~F12~), arrow keys, or mouse inputs. Keeping your hands anchored to the home row minimizes physical strain during long development sessions.
+2. *Infinite Extensibility*: Because Emacs has thousands of built-in commands, it uses **Chords** (pressing multiple keys sequentially) to prevent running out of keyboard real estate.
+3. *Contextual Adaptability*: The meaning of your keys changes depending on the file type you are editing, creating a contextual interface that adapts to your workflow.
+
+** Anatomy of a Keybind: Prefixes and Chords
+
+Emacs groups commands logically using **Prefix Keys**. A prefix key acts as a gateway to a specific family of commands. Once you press a prefix, Emacs waits for the next key in the "chord".
+
+- ~C-x~ *(Control + x)*: The **Global System Prefix**. Used for fundamental editor operations like handling buffers, opening files, and quitting.
+  - ~C-x C-s~: Save the current file.
+  - ~C-x C-b~: List open buffers.
+- ~C-c~ *(Control + c)*: The **User / Mode Prefix**. Reserved specifically for user customizations and major-mode specific commands.
+  - ~C-c l~: Bound to our Language Server Protocol (~lsp-mode~) map in this configuration.
+- ~M-x~ *(Alt + x)*: The **Command HUD**. This opens a minibuffer where you can type out and execute *any* Emacs function by its plain-text name, completely bypassing the need for a physical keybinding.
+
+** The Keymap Hierarchy
+
+When you press a key, Emacs filters your input through a strict map hierarchy. The first map that contains a definition for your key combination wins:
+
+1. *Emulation Maps*: Used by packages like `evil-mode` (Vim emulation) to completely hijack inputs.
+2. *Minor Mode Maps*: Modular, opt-in features that span across major modes (e.g., `yafolding-mode` or `lsp-mode`). These override major modes to ensure their utilities remain globally accessible.
+3. *Major Mode Maps*: File-type specific configurations (e.g., `python-mode`, `js-mode`). Pressing ~TAB~ in Python indents by 4 spaces, while in web-mode it might indent by 2.
+4. *Global Map*: The catch-all baseline map. If a key isn't claimed by a major or minor mode, Emacs looks here (e.g., your custom ~C-z~ undo configurations).
+
+* BOOTSTRAP & PACKAGE MANAGEMENT
+
+** Package Repositories & Core Initialization
+
+#+BEGIN_SRC emacs-lisp
 ;; -*- lexical-binding: t; -*-
 
 (require 'package)
@@ -34,7 +75,13 @@
   (async-bytecomp-package-mode t)
   (async-bytecomp-allowed-packages '(all))
   (async-package-do-action t))
+#+END_SRC
 
+* CORE EMACS BEHAVIOR
+
+** Editor Defaults
+
+#+BEGIN_SRC emacs-lisp
 (use-package emacs
   :custom
   ;; Still needed for terminals
@@ -101,7 +148,11 @@
   ("C--" . text-scale-decrease)
   ("<C-wheel-up>" . text-scale-increase)
   ("<C-wheel-down>" . text-scale-decrease))
+#+END_SRC
 
+** Which-Key
+
+#+BEGIN_SRC emacs-lisp
 (use-package which-key
   :ensure nil ; Don't install which-key because it's now built-in
   :hook (after-init . which-key-mode)
@@ -114,7 +165,11 @@
   (which-key-min-display-lines 6)
   (which-key-idle-delay 0.3)
   (which-key-allow-imprecise-window-fit nil))
+#+END_SRC
 
+** Configuration Commands
+
+#+BEGIN_SRC emacs-lisp
 (defun start/open-init-file ()
   "Open init.org configuration file."
   (interactive)
@@ -124,7 +179,11 @@
   "Reload Emacs config."
   (interactive)
   (load-file (expand-file-name "init.el" user-emacs-directory)))
+#+END_SRC
 
+** Global Text Formatting & Indentation Defaults
+
+#+BEGIN_SRC emacs-lisp
 (setq-default indent-tabs-mode nil)
 (setq-default tab-width 4)
 (setq-default c-basic-offset 4)
@@ -137,7 +196,11 @@
 (when (fboundp 'tool-bar-mode) (tool-bar-mode -1))
 (when (fboundp 'menu-bar-mode) (menu-bar-mode -1))
 (when (fboundp 'scroll-bar-mode) (scroll-bar-mode -1))
+#+END_SRC
 
+** Frame Indicators & Decorative Overlays
+
+#+BEGIN_SRC emacs-lisp
 (column-number-mode t)
 (display-battery-mode t)
 (display-time-mode t)
@@ -150,7 +213,15 @@
         (bottom . left)
         (up . left)
         (down . left)))
+#+END_SRC
 
+* INTERFACE & APPEARANCE
+
+** Typography & Font Specifications
+
+Configures **FiraCode Nerd Font** at a compact, precise size (95/10pt) matching standard terminal system settings.
+
+#+BEGIN_SRC emacs-lisp
 (set-frame-font "FiraCode Nerd Font-10" nil t)
 (use-package ligature
   :load-path "path-to-ligature-repo"
@@ -222,7 +293,11 @@
   ;; Enables ligature checks globally in all buffers. You can also do it
   ;; per mode with `ligature-mode'.
   (global-ligature-mode t))
+#+END_SRC
 
+** Dark Theme & Color Definitions
+
+#+BEGIN_SRC emacs-lisp
 ;; Load built-in dark theme (modus-vivendi is built-in as of Emacs 28+)
 (load-theme 'modus-vivendi t)
 
@@ -264,7 +339,11 @@
  `(lazy-highlight
    ((t (:background ,my/accent-bg-soft
         :foreground ,my/accent-primary)))))
+#+END_SRC
 
+** Package-Specific Accent Integrations
+
+#+BEGIN_SRC emacs-lisp
 ;; Helm & Helm-Core
 (with-eval-after-load 'helm
   (custom-set-faces
@@ -378,7 +457,11 @@
           :height 1.2))))
    `(markdown-header-face-2
      ((t (:foreground "#38bdf8" :weight bold))))))
+#+END_SRC
 
+** Window Management
+
+#+BEGIN_SRC emacs-lisp
 (use-package winner)
 
 (winner-mode 1)
@@ -392,7 +475,13 @@
 
 ;; Bind the toggle function to a convenient key combination
 (global-set-key (kbd "C-c z") #'my/toggle-window-zoom)
+#+END_SRC
 
+** Line Numbers
+
+Enable fast, modern built-in line numbers globally. Relative numbers are used for better code navigation.
+
+#+BEGIN_SRC emacs-lisp
 (global-display-line-numbers-mode 1)
 
 ;; Disable line numbers in specific buffers where they don't make sense
@@ -403,7 +492,13 @@
                 magit-status-mode))
   (add-hook (intern (concat (symbol-name mode) "-hook"))
             (lambda () (display-line-numbers-mode 0))))
+#+END_SRC
 
+** Text Wrapping (Truncation)
+
+Disable text wrapping globally for code layout, but enable soft wrapping (Visual Line Mode) for prose files.
+
+#+BEGIN_SRC emacs-lisp
 ;; Disable text wrapping globally (lines truncate at the window edge)
 (setq-default truncate-lines t)
 
@@ -411,28 +506,54 @@
 (add-hook 'text-mode-hook #'visual-line-mode)
 (add-hook 'markdown-mode-hook #'visual-line-mode)
 (add-hook 'org-mode-hook #'visual-line-mode)
+#+END_SRC
 
+* AUTOMATION & FILE HANDLING
+
+** Modern Autosave
+
+Save actual files automatically when Emacs is idle or when switching focus to another application window.
+
+#+BEGIN_SRC emacs-lisp
 ;; Enable built-in auto-save when Emacs is idle for 1 second
 (auto-save-visited-mode 1)
 (setq auto-save-visited-interval 1)
 
 ;; Save files automatically whenever Emacs loses focus
 (add-hook 'focus-out-hook (lambda () (save-some-buffers t)))
+#+END_SRC
 
+** Buffer Cleanup on Save
+
+Automatically strip trailing whitespaces and clean up empty trailing lines safely.
+
+#+BEGIN_SRC emacs-lisp
 ;; Delete all trailing whitespace before saving a file
 (add-hook 'before-save-hook #'delete-trailing-whitespace)
 
 ;; Ensure there is exactly one newline at the end of the file
 (setq require-final-newline t)
 (setq mode-require-final-newline t)
+#+END_SRC
 
+** Whitespace Visualization
+
+A clean, non-intrusive way to display invisible characters that respects modus-vivendi.
+
+#+BEGIN_SRC emacs-lisp
 ;; 1. Base styles to monitor (excluding hardcoded backgrounds)
 (setq whitespace-style
       '(face spaces space-mark tabs tab-mark trailing))
 
 ;; Enable minimal whitespace visibility globally
 (global-whitespace-mode 1)
+#+END_SRC
 
+** Global Auto-Revert Configuration
+
+Automatically reload files when changed on disk by external applications.
+
+#+BEGIN_SRC emacs-lisp
 ;; Automatically reload files changed on disk globally
 (global-auto-revert-mode 1)
 
@@ -441,7 +562,13 @@
 
 ;; Make Emacs check files instantly using file system notifications (instead of a slow timer)
 (setq auto-revert-use-notify t)
+#+END_SRC
 
+* SEARCH, NAVIGATION & MINIBUFFER
+
+** Ediff Clipboard Integration
+
+#+BEGIN_SRC emacs-lisp
 (defun ediff-clipboard-with-file (file-name)
   "Compare FILE-NAME with the clipboard."
   (interactive "fCompare file with clipboard: ")
@@ -464,7 +591,11 @@
 
 (setq ediff-split-window-function #'split-window-horizontally)
 (setq ediff-window-setup-function #'ediff-setup-windows-plain)
+#+END_SRC
 
+** Helm Ecosystem
+
+#+BEGIN_SRC emacs-lisp
 (use-package helm
    :init
   (helm-mode 1)
@@ -476,13 +607,21 @@
   (define-key global-map [remap execute-extended-command] #'helm-M-x)
   (define-key global-map [remap find-file] #'helm-find-files)
   (define-key global-map [remap switch-to-buffer] #'helm-mini))
+#+END_SRC
 
+** Helm Keymap Overrides
+
+#+BEGIN_SRC emacs-lisp
 (with-eval-after-load 'helm
   (define-key helm-map (kbd "<tab>") #'helm-next-line)
   (define-key helm-map (kbd "<backtab>") #'helm-previous-line)
   (define-key helm-map (kbd "<right>") #'helm-execute-persistent-action)
   (define-key helm-map (kbd "<left>") #'helm-execute-persistent-action))
+#+END_SRC
 
+** Lisp Evaluation Completions
+
+#+BEGIN_SRC emacs-lisp
 (with-eval-after-load 'helm
   (unless (boundp 'completion-in-region-function)
     (define-key lisp-interaction-mode-map
@@ -491,7 +630,15 @@
     (define-key emacs-lisp-mode-map
                 [remap completion-at-point]
                 #'helm-lisp-completion-at-point)))
+#+END_SRC
 
+* EDITING & HISTORY
+
+** Undo-Tree Virtualization Engine
+
+*** Contextual Mappings & Save Behaviors
+
+#+BEGIN_SRC emacs-lisp
 (use-package undo-tree
    :init
   (global-undo-tree-mode 1)
@@ -507,7 +654,13 @@
   (global-unset-key (kbd "C-z"))
   (global-set-key (kbd "C-z") #'undo-only)
   (global-set-key (kbd "C-S-z") #'undo-tree-redo))
+#+END_SRC
 
+** Structural Selection Upgrades
+
+*** Expand Region Mappings
+
+#+BEGIN_SRC emacs-lisp
 (use-package expand-region
    :bind
   (("C-S-SPC" . er/expand-region)
@@ -516,10 +669,22 @@
                 (if (use-region-p)
                     (er/contract-region 1)
                   (call-interactively #'set-mark-command))))))
+#+END_SRC
 
+** Code Folding Engines
+
+*** Yafolding Hook Placements
+
+#+BEGIN_SRC emacs-lisp
 (use-package yafolding
    :hook ((prog-mode . yafolding-mode)))
+#+END_SRC
 
+* VERSION CONTROL
+
+** Magit Engine
+
+#+BEGIN_SRC emacs-lisp
 (use-package magit
   :commands magit-status
   :bind ("C-x g" . magit-status))
@@ -527,7 +692,13 @@
 (global-set-key (kbd "C-x C-l") #'magit-log-buffer-file)
 
 (setq transient-default-level 7)
+#+END_SRC
 
+* ORG MODE
+
+** Org Core Ecosystem
+
+#+BEGIN_SRC emacs-lisp
 (use-package org
   :defer t
   :config
@@ -537,13 +708,25 @@
 
 (setq org-adapt-indentation t)
 (setq org-support-shift-select t)
+#+END_SRC
 
+** Key Discovery Popups
+
+#+BEGIN_SRC emacs-lisp
 (use-package which-key
   :init
   (which-key-mode)
   :config
   (setq which-key-idle-delay 0.3))
+#+END_SRC
 
+* LANGUAGE SERVER PROTOCOL & DEVELOPMENT
+
+** LSP Core Framework Orchestration
+
+*** LSP-Mode Protocol Config
+
+#+BEGIN_SRC emacs-lisp
 (use-package lsp-mode
   :commands (lsp lsp-deferred)
   :hook ((python-mode . lsp-deferred)
@@ -557,14 +740,24 @@
   (setq lsp-enable-indentation t
         lsp-diagnostics-provider :flycheck)
   (lsp-enable-which-key-integration t))
+#+END_SRC
 
+*** LSP Graphic User Interface Enhancements
+
+#+BEGIN_SRC emacs-lisp
 (use-package lsp-ui
   :commands lsp-ui-mode
   :hook (lsp-mode . lsp-ui-mode)
   :config
   (setq lsp-ui-doc-enable t
         lsp-ui-sideline-enable t))
+#+END_SRC
 
+** Python Environment Ecosystem
+
+*** Ruff & Pyright Integration
+
+#+BEGIN_SRC emacs-lisp
 (add-hook 'python-mode-hook #'flycheck-mode)
 
 (use-package python
@@ -576,7 +769,11 @@
    lsp-pylsp-plugins-flake8-enabled nil
    lsp-pylsp-plugins-mccabe-enabled nil
    lsp-pylsp-plugins-pycodestyle-enabled nil))
+#+END_SRC
 
+** JavaScript & TypeScript
+
+#+BEGIN_SRC emacs-lisp
 (add-to-list 'auto-mode-alist '("\\.mjs\\'" . js-ts-mode))
 
 ;; 1. Define custom Flycheck checker for Biome
@@ -624,21 +821,41 @@
 ;; Enable LSP for CSS modes
 (add-hook 'css-mode-hook #'lsp)
 (add-hook 'css-ts-mode-hook #'lsp)
+#+END_SRC
 
+** Indentation Guides
+
+#+BEGIN_SRC emacs-lisp
 ;; Fixed the indent-bars crash by ensuring the compat dependency exists
 (use-package compat
   :ensure t)
 
 (use-package indent-bars
    :hook ((prog-mode yaml-mode conf-mode) . indent-bars-mode))
+#+END_SRC
 
+** Project Compilation Infrastructure
+
+#+BEGIN_SRC emacs-lisp
 (global-set-key (kbd "C-S-t") #'project-shell)
 (global-set-key (kbd "C-S-f") #'project-find-file)
 (global-set-key (kbd "C-S-g") #'project-find-regexp)
+#+END_SRC
 
+** Shell & Native Compilation Color Enhancements
+
+#+BEGIN_SRC emacs-lisp
 (add-hook 'compilation-filter-hook #'ansi-color-compilation-filter)
 (setq magit-process-apply-ansi-colors t)
+#+END_SRC
 
+* PROGRAMMING LANGUAGES & FILE TYPES
+
+** Web Mode with Tree-Sitter & Auto-Completion
+
+Enhanced Django HTML (`.djhtml`) configuration with modern treesit-based syntax objects, company-mode completion, and explicit 4-space layout.
+
+#+BEGIN_SRC emacs-lisp
 (use-package web-mode
   :mode (("\\.djhtml\\'" . web-mode)
          ("\\.html\\.djhtml\\'" . web-mode))
@@ -675,15 +892,31 @@
   ;; Tweak responsiveness variables for instant typing feedback
   (setq company-idle-delay 0.1)
   (setq company-minimum-prefix-length 1))
+#+END_SRC
 
+** YAML
+
+#+BEGIN_SRC emacs-lisp
 ;; YAML highlighting for Ansible/K8s/Docker-Compose
 (use-package yaml-mode
    :mode "\\.yml\\'")
+#+END_SRC
 
+** Dockerfile
+
+#+BEGIN_SRC emacs-lisp
 ;; Dockerfile highlighting
 (use-package dockerfile-mode
    :mode "Dockerfile\\'")
+#+END_SRC
 
+* TERMINALS & SHELLS
+
+** High Performance Terminal (vterm)
+
+Install and configure the libgterm-backed terminal emulator for lightning-fast command handling and full shell interaction.
+
+#+BEGIN_SRC emacs-lisp
 (use-package vterm
    :bind ("C-c t" . vterm)
   :custom
@@ -715,7 +948,11 @@
   (setq vterm-toggle-posframe-style 'center)
   (setq vterm-toggle-posframe-width 90)
   (setq vterm-toggle-posframe-height 25))
+#+END_SRC
 
+** Eshell
+
+#+BEGIN_SRC emacs-lisp
 ;; Eshell: Emacs' built-in, platform-agnostic shell.
 (use-package eshell
   :bind ("C-c e s" . eshell)
@@ -730,15 +967,46 @@
   ;; Save command history globally
   (setq eshell-hist-ignoredups t
         eshell-save-history-on-exit t))
+#+END_SRC
 
+* COMPLETION & MINIBUFFER ALTERNATIVES
+
+** Vertico
+
+NOTE: This config primarily relies on Helm (Section above).
+Vertico and Marginalia are configured here as fallbacks or future
+replacements, but are left disabled by default to prevent conflicts.
+
+#+BEGIN_SRC emacs-lisp
 (use-package vertico
    :defer t
   :config
   ;; (vertico-mode 1) ; Uncomment to switch from Helm to Vertico
   (setq vertico-cycle t))
+#+END_SRC
 
+** Marginalia
+
+#+BEGIN_SRC emacs-lisp
 (use-package marginalia
    :defer t
   :config
   ;; (marginalia-mode 1) ; Uncomment to enable minibuffer annotations
   )
+#+END_SRC
+
+* FUTURE COMPONENT EXTENSION SLOTS
+
+** Containers & Cloud Engineering
+
+Future configuration space for Docker / Kubernetes / Ansible beyond
+the currently enabled Dockerfile and YAML support.
+
+** Advanced Completion Tooling
+
+Future configuration space for Corfu / Vertico / Marginalia alternatives.
+
+** Additional Language Environments
+
+Future language-specific configuration can be added here without
+disturbing the core configuration structure.
