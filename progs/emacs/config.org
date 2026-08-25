@@ -623,7 +623,6 @@ Automatically reload files when changed on disk by external applications.
 (current-kill 0)))
 (set-buffer-modified-p nil))
 
-```
 ;; Remove the temporary clipboard buffer after Ediff exits.
 (let ((ediff-after-quit-hook-internal
        (list
@@ -633,7 +632,7 @@ Automatically reload files when changed on disk by external applications.
   (ediff-buffers
    clip-buf
    (find-file-noselect file-name)))))
-```
+
 
 (global-set-key (kbd "C-c e c") #'ediff-clipboard-with-file)
 
@@ -693,11 +692,10 @@ ediff-window-setup-function #'ediff-setup-windows-plain)
 [remap completion-at-point]
 #'helm-lisp-completion-at-point)
 
-```
 (define-key emacs-lisp-mode-map
   [remap completion-at-point]
   #'helm-lisp-completion-at-point)))
-```
+
 
 #+END_SRC
 
@@ -719,11 +717,11 @@ ediff-window-setup-function #'ediff-setup-windows-plain)
 undo-tree-visualizer-diff t
 undo-tree-auto-save-history t
 
-```
+
     ;; Keep undo history outside project directories.
     undo-tree-history-directory-alist
     '(("." . "~/.emacs.d/var/undo-tree/"))))
-```
+
 
 #+END_SRC
 
@@ -1012,9 +1010,7 @@ Use vterm as the sole interactive shell environment. This replaces the previous 
 #+BEGIN_SRC emacs-lisp
 (use-package vterm
 :bind
-;; C-c e s replaces the previous Eshell command.
-(("C-c t" . vterm)
-("C-c e s" . vterm))
+("C-c t" . vterm)
 
 :custom
 (vterm-max-scrollback 10000)

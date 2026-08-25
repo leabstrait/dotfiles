@@ -494,7 +494,6 @@ mode-require-final-newline t)
 (current-kill 0)))
 (set-buffer-modified-p nil))
 
-```
 ;; Remove the temporary clipboard buffer after Ediff exits.
 (let ((ediff-after-quit-hook-internal
        (list
@@ -504,7 +503,7 @@ mode-require-final-newline t)
   (ediff-buffers
    clip-buf
    (find-file-noselect file-name)))))
-```
+
 
 (global-set-key (kbd "C-c e c") #'ediff-clipboard-with-file)
 
@@ -552,11 +551,9 @@ ediff-window-setup-function #'ediff-setup-windows-plain)
 [remap completion-at-point]
 #'helm-lisp-completion-at-point)
 
-```
 (define-key emacs-lisp-mode-map
   [remap completion-at-point]
   #'helm-lisp-completion-at-point)))
-```
 
 (use-package undo-tree
 :init
@@ -569,11 +566,10 @@ ediff-window-setup-function #'ediff-setup-windows-plain)
 undo-tree-visualizer-diff t
 undo-tree-auto-save-history t
 
-```
+
     ;; Keep undo history outside project directories.
     undo-tree-history-directory-alist
     '(("." . "~/.emacs.d/var/undo-tree/"))))
-```
 
 ;; No custom undo bindings: keep Emacs's native undo commands.
 ;;
@@ -769,9 +765,7 @@ company-minimum-prefix-length 1))
 
 (use-package vterm
 :bind
-;; C-c e s replaces the previous Eshell command.
-(("C-c t" . vterm)
-("C-c e s" . vterm))
+("C-c t" . vterm)
 
 :custom
 (vterm-max-scrollback 10000)
