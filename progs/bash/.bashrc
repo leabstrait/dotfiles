@@ -57,9 +57,9 @@ shopt -s no_empty_cmd_completion
 # 4. FILE MANAGEMENT & NAVIGATION ALIASES
 # ---------------------------------------------------------------------
 alias cat='bat'
-alias ls='eza -lh --color=always --group-directories-first --icons'
+alias ls='eza -lh --color=always --group-directories-first --icons=always'
 alias ll='ls -l'
-alias la='eza -la'
+alias la='ls -la'
 alias lsd='ls -ld *(-/DN)'
 alias tree='eza --tree'
 

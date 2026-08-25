@@ -14,7 +14,7 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 
 SRC = Path.home() / "ws" / "i" / "emacs"
-REPO = "https://github.com/emacs-mirror/emacs.git"
+REPO = "https://git.savannah.gnu.org/git/emacs.git"
 
 # macOS:
 APP = Path("/Applications/Emacs.app")
@@ -80,8 +80,6 @@ def deps(os_type):
             "gnutls",
             "jansson",
             "libxml2",
-            "cairo",
-            "harfbuzz",
             "jpeg",
             "giflib",
             "libtiff",

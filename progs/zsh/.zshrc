@@ -9,36 +9,36 @@
 # ---------------------------------------------------------------------
 export PATH="$HOME/.local/bin:$PATH"
 
-case "$(uname -s)" in
-    Darwin) # macOS Homebrew GNU Toolchain Overrides
-        if [[ -n "$HOMEBREW_PREFIX" ]]; then
-            export PATH="$HOMEBREW_PREFIX/opt/curl/bin:$PATH"
-            export PATH="$HOMEBREW_PREFIX/opt/gnu-getopt/bin:$PATH"
-            export PATH="$HOMEBREW_PREFIX/opt/jpeg/bin:$PATH"
-            export PATH="$HOMEBREW_PREFIX/opt/binutils/bin:$PATH"
-            export PATH="$HOMEBREW_PREFIX/opt/gnu-indent/bin:$PATH"
-            export PATH="$HOMEBREW_PREFIX/opt/gnu-which/bin:$PATH"
+# case "$(uname -s)" in
+#     Darwin) # macOS Homebrew GNU Toolchain Overrides
+#         if [[ -n "$HOMEBREW_PREFIX" ]]; then
+#             export PATH="$HOMEBREW_PREFIX/opt/curl/bin:$PATH"
+#             export PATH="$HOMEBREW_PREFIX/opt/gnu-getopt/bin:$PATH"
+#             export PATH="$HOMEBREW_PREFIX/opt/jpeg/bin:$PATH"
+#             export PATH="$HOMEBREW_PREFIX/opt/binutils/bin:$PATH"
+#             export PATH="$HOMEBREW_PREFIX/opt/gnu-indent/bin:$PATH"
+#             export PATH="$HOMEBREW_PREFIX/opt/gnu-which/bin:$PATH"
 
-            local gnu_tools=(coreutils findutils gnu-sed gnu-tar gawk grep make diffutils ed gpatch wdiff gnu-indent gnu-which)
-            for tool in "${gnu_tools[@]}"; do
-                export PATH="$HOMEBREW_PREFIX/opt/$tool/libexec/gnubin:$PATH"
-                export MANPATH="$HOMEBREW_PREFIX/opt/$tool/libexec/gnuman:$MANPATH"
-            done
+#             local gnu_tools=(coreutils findutils gnu-sed gnu-tar gawk grep make diffutils ed gpatch wdiff gnu-indent gnu-which)
+#             for tool in "${gnu_tools[@]}"; do
+#                 export PATH="$HOMEBREW_PREFIX/opt/$tool/libexec/gnubin:$PATH"
+#                 export MANPATH="$HOMEBREW_PREFIX/opt/$tool/libexec/gnuman:$MANPATH"
+#             done
 
-            alias objdump='gobjdump'
-            alias nm='gnm'
-            alias size='gsize'
-            alias strings='gstrings'
-            alias ar='gar'
-            alias ranlib='granlib'
-            alias indent='gindent'
-            alias which='gwhich'
-        fi
-        ;;
-    Linux)
-        # Arch Linux uses native standard toolchain paths
-        ;;
-esac
+#             alias objdump='gobjdump'
+#             alias nm='gnm'
+#             alias size='gsize'
+#             alias strings='gstrings'
+#             alias ar='gar'
+#             alias ranlib='granlib'
+#             alias indent='gindent'
+#             alias which='gwhich'
+#         fi
+#         ;;
+#     Linux)
+#         # Arch Linux uses native standard toolchain paths
+#         ;;
+# esac
 
 # ---------------------------------------------------------------------
 # 2. EDITOR, PAGER & FORMATTING ENVIRONMENT
@@ -79,9 +79,9 @@ setopt HIST_SAVE_NO_DUPS
 # 4. FILE MANAGEMENT & NAVIGATION ALIASES
 # ---------------------------------------------------------------------
 alias cat='bat'
-alias ls='eza -lh --color=always --group-directories-first --icons'
+alias ls='eza -lh --color=always --group-directories-first --icons=always'
 alias ll='ls -l'
-alias la='eza -la'
+alias la='ls -la'
 alias lsd='ls -ld *(-/DN)'
 alias tree='eza --tree'
 
