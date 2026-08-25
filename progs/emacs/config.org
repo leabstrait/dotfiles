@@ -1077,7 +1077,8 @@ NOTE: This config primarily relies on Helm. Vertico and Marginalia remain config
 :defer t
 :config
 ;; Uncomment to enable minibuffer annotations.
-;; (marginalia-mode 1))
+;; (marginalia-mode 1)
+)
 #+END_SRC
 
 * FUTURE COMPONENT EXTENSION SLOTS

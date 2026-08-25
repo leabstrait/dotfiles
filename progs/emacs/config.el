@@ -814,4 +814,5 @@ vterm-toggle-posframe-height 25))
 :defer t
 :config
 ;; Uncomment to enable minibuffer annotations.
-;; (marginalia-mode 1))
+;; (marginalia-mode 1)
+)
