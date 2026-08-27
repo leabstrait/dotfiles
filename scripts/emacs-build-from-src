@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+from datetime import datetime
 import os
 import platform
 import shutil
@@ -23,6 +24,19 @@ APP = Path("/Applications/Emacs.app")
 PREFIX = Path("/usr/local")
 
 JOBS = os.cpu_count() or 4
+
+# Dependency tracking lists for uninstallation logic
+MACOS_DEPS = [
+    "texlive", "autoconf", "automake", "pkg-config", "texinfo",
+    "make", "gcc", "libgccjit", "tree-sitter", "gnutls",
+    "jansson", "libxml2", "jpeg", "giflib", "libtiff", "webp"
+]
+
+ARCH_DEPS = [
+    "base-devel", "git", "gcc", "libgccjit", "tree-sitter",
+    "jansson", "libxml2", "gnutls", "gtk3", "texinfo",
+    "harfbuzz", "cairo", "texlive"
+]
 
 
 # ---------------------------------------------------------------------------
@@ -85,51 +99,28 @@ def get_make_command(os_type):
 def deps(os_type):
     if os_type == "macos":
         command("brew")
-
-        run([
-            "brew", "install",
-            "texlive",
-            "autoconf",
-            "automake",
-            "pkg-config",
-            "texinfo",
-            "make",
-            "gcc",
-            "libgccjit",
-            "tree-sitter",
-            "gnutls",
-            "jansson",
-            "libxml2",
-            "jpeg",
-            "giflib",
-            "libtiff",
-            "webp",
-        ])
-
+        run(["brew", "install"] + MACOS_DEPS)
     else:
         run([
             "sudo", "pacman", "-Syu",
             "--needed",
             "--noconfirm",
-            "base-devel",
-            "git",
-            "gcc",
-            "libgccjit",
-            "tree-sitter",
-            "jansson",
-            "libxml2",
-            "gnutls",
-            "gtk3",
-            "texinfo",
-            "harfbuzz",
-            "cairo",
-            "texlive",
-        ])
+        ] + ARCH_DEPS)
 
 
 # ---------------------------------------------------------------------------
 # Source
 # ---------------------------------------------------------------------------
+
+def clean_repo():
+    print("\nCleaning build artifacts while preserving local changes...")
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    stash_msg = f"auto-stash-for-clean-build-at-{timestamp}"
+
+    subprocess.run(["git", "stash", "-u", "-m", stash_msg], cwd=SRC, check=False)
+    subprocess.run(["git", "clean", "-fdX"], cwd=SRC, check=True)
+    subprocess.run(["git", "stash", "pop"], cwd=SRC, check=False)
+
 
 def update_source(mode):
     """
@@ -186,7 +177,111 @@ def update_source(mode):
 
 
 # ---------------------------------------------------------------------------
-# Environment
+# Uninstall
+# ---------------------------------------------------------------------------
+
+def uninstall(os_type):
+    print(
+        "\n"
+        "========================================\n"
+        " GNU Emacs uninstaller\n"
+        "========================================"
+    )
+
+    if os_type == "macos":
+        if APP.exists():
+            print(f"\nRemoving {APP}...")
+            run(["sudo", "rm", "-rf", APP])
+
+        for cli_path in [Path("/usr/local/bin/emacs"), Path("/usr/local/bin/emacsclient")]:
+            if cli_path.exists() or cli_path.is_symlink():
+                print(f"Removing symlink {cli_path}...")
+                run(["sudo", "rm", "-f", cli_path])
+
+        print("\nChecking Homebrew dependencies for safety removal...")
+        installed_brew = subprocess.check_output(["brew", "list", "--formula"], text=True).splitlines()
+
+        # Filter dependencies that are actively required by other installed formulae
+        safe_to_remove = []
+        for pkg in MACOS_DEPS:
+            if pkg in installed_brew:
+                try:
+                    # Check if any other package requires it
+                    deps_check = subprocess.check_output(["brew", "uses", "--installed", pkg], text=True).splitlines()
+                    # Filter out emacs deps from the uses list
+                    external_dependents = [d for d in deps_check if d not in MACOS_DEPS and d != "emacs"]
+                    if not external_dependents:
+                        safe_to_remove.append(pkg)
+                    else:
+                        print(f"Skipping {pkg}: required by other packages ({', '.join(external_dependents)})")
+                except Exception:
+                    safe_to_remove.append(pkg)
+
+        if safe_to_remove:
+            print(f"\nUninstalling unused Homebrew dependencies: {', '.join(safe_to_remove)}")
+            run(["brew", "uninstall"] + safe_to_remove)
+        else:
+            print("\nNo isolated Homebrew dependencies found to uninstall.")
+
+    elif os_type == "arch":
+        if (SRC / "Makefile").exists():
+            print("\nUninstalling via make target...")
+            make_cmd = get_make_command(os_type)
+            run(["sudo", make_cmd, "uninstall"], cwd=SRC)
+        else:
+            print("\nSource Makefile not found; skipping make uninstall step.")
+
+        print("\nChecking Arch packages for safe removal...")
+        installed_explicit = set(subprocess.check_output(["pacman", "-Qqe"], text=True).splitlines())
+
+        safe_to_remove = []
+        for pkg in ARCH_DEPS:
+            # Skip base-devel group or core packages if needed, check if explicitly or implicitly installed
+            try:
+                pkg_check = subprocess.run(["pacman", "-Qi", pkg], capture_output=True, text=True)
+                if pkg_check.returncode == 0:
+                    # Check if required by other explicitly installed packages outside our list
+                    required_by_line = [l for l in pkg_check.stdout.splitlines() if "Required By" in l]
+                    is_required_externally = False
+                    if required_by_line:
+                        reqs = required_by_line[0].split(":")[-1].strip()
+                        if reqs and reqs != "None":
+                            active_reqs = [r.strip() for r in reqs.split()]
+                            external_reqs = [r for r in active_reqs if r not in ARCH_DEPS]
+                            if external_reqs:
+                                is_required_externally = True
+
+                    if not is_required_externally:
+                        safe_to_remove.append(pkg)
+                    else:
+                        print(f"Skipping {pkg}: required by external packages.")
+            except Exception:
+                continue
+
+        if safe_to_remove:
+            print(f"\nRemoving safe Arch dependencies and unneeded orphans...")
+            # Remove packages and clean up cascading unused dependencies safely
+            run(["sudo", "pacman", "-Rns", "--noconfirm"] + safe_to_remove)
+
+        # Clean up remaining true orphan dependencies safely
+        try:
+            orphans = subprocess.check_output(["pacman", "-Qdtq"], text=True).splitlines()
+            if orphans:
+                print(f"\nCleaning up secondary orphaned packages: {', '.join(orphans)}")
+                run(["sudo", "pacman", "-Rns", "--noconfirm"] + orphans)
+        except Exception:
+            pass
+
+    print(
+        "\n"
+        "========================================\n"
+        " UNINSTALL SUCCESS\n"
+        "========================================"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Environment & Configure
 # ---------------------------------------------------------------------------
 
 def environment(os_type):
@@ -333,10 +428,7 @@ def install(os_type):
 # ---------------------------------------------------------------------------
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Simple GNU Emacs builder"
-    )
-
+    parser = argparse.ArgumentParser(description="Simple GNU Emacs builder and uninstaller")
     parser.add_argument(
         "version",
         choices=["stable", "latest"],
@@ -344,10 +436,19 @@ def main():
         default="latest",
         help="stable release or latest master",
     )
+    parser.add_argument(
+        "--uninstall",
+        action="store_true",
+        help="Uninstall Emacs and clean up unused dependencies",
+    )
 
     args = parser.parse_args()
 
     os_type = system()
+
+    if args.uninstall:
+        uninstall(os_type)
+        return
 
     print(
         "\n"
@@ -372,6 +473,7 @@ def main():
 
     # Existing checkout is updated; missing checkout is cloned.
     update_source(args.version)
+    clean_repo()
 
     # Git checkout -> configure must be regenerated.
     run(["./autogen.sh"], cwd=SRC)
@@ -386,7 +488,8 @@ def main():
     install(os_type)
 
     print(
-        "\n========================================\n"
+        "\n"
+        "========================================\n"
         " SUCCESS\n"
         "========================================"
     )
