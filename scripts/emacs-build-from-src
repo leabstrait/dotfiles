@@ -88,7 +88,7 @@ def deps(os_type):
 
         run([
             "brew", "install",
-            "texlive"
+            "texlive",
             "autoconf",
             "automake",
             "pkg-config",
