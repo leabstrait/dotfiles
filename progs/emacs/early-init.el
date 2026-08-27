@@ -49,7 +49,7 @@
 ;; Startup about 0.01 faster
 (set-face-attribute 'default nil
                     :font "FiraCode Nerd Font" ; Set your favorite type of font or download JetBrains Mono
-                    :height 110
+                    :height 100
                     :weight 'medium)
 ;; This sets the default font on all graphical frames created after restarting Emacs.
 ;; Does the same thing as 'set-face-attribute default' above, but emacsclient fonts
