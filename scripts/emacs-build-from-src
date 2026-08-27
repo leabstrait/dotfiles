@@ -15,7 +15,7 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 
 SRC = Path.home() / "ws" / "i" / "emacs"
-REPO = "https://https.git.savannah.gnu.org/git/emacs.git"
+REPO = "https://https.git.savannah.gnu.org/git/emacs.git/"
 
 # macOS:
 APP = Path("/Applications/Emacs.app")
