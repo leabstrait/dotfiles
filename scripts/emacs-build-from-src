@@ -123,6 +123,7 @@ def deps(os_type):
             "texinfo",
             "harfbuzz",
             "cairo",
+            "texlive",
         ])
 
 
