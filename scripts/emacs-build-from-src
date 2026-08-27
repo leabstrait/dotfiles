@@ -14,7 +14,7 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 
 SRC = Path.home() / "ws" / "i" / "emacs"
-REPO = "https://git.savannah.gnu.org/git/emacs.git"
+REPO = "https://https.git.savannah.gnu.org/git/emacs.git"
 
 # macOS:
 APP = Path("/Applications/Emacs.app")
@@ -60,6 +60,24 @@ def system():
     die("Only macOS and Arch Linux are supported")
 
 
+def get_brew_prefix():
+    try:
+        return subprocess.check_output(["brew", "--prefix"], text=True).strip()
+    except Exception:
+        return "/opt/homebrew"
+
+
+def get_make_command(os_type):
+    if os_type == "macos":
+        # Use GNU make absolute path directly without messing with shell PATH
+        brew_prefix = get_brew_prefix()
+        gmake_path = Path(brew_prefix) / "opt" / "make" / "libexec" / "gnubin" / "make"
+        if gmake_path.exists():
+            return str(gmake_path)
+        return "gmake"
+    return "make"
+
+
 # ---------------------------------------------------------------------------
 # Dependencies
 # ---------------------------------------------------------------------------
@@ -70,10 +88,12 @@ def deps(os_type):
 
         run([
             "brew", "install",
+            "texlive"
             "autoconf",
             "automake",
             "pkg-config",
             "texinfo",
+            "make",
             "gcc",
             "libgccjit",
             "tree-sitter",
@@ -141,13 +161,13 @@ def update_source(mode):
 
         return
 
-    # Latest stable release tag.
+    # Latest stable release tag using version sort order so numbers compare properly.
     tags = subprocess.check_output(
         [
             "git",
             "tag",
             "--list",
-            "emacs-*",
+            "emacs-[0-9]*",
             "--sort=-version:refname",
         ],
         cwd=SRC,
@@ -172,21 +192,15 @@ def environment(os_type):
     env = os.environ.copy()
 
     if os_type == "macos":
-
-        # Always use Apple's clang for the native macOS build.
+        # Point directly to Apple's native Clang and standard C++ compiler
         env["CC"] = "/usr/bin/clang"
         env["CXX"] = "/usr/bin/clang++"
 
-        brew = subprocess.check_output(
-            ["brew", "--prefix"],
-            text=True,
-        ).strip()
-
-        env["PATH"] = (
-            f"{brew}/opt/texinfo/bin:"
-            f"{brew}/bin:"
-            f"{env.get('PATH', '')}"
-        )
+        # Only add texinfo to PATH if needed, without messing up system paths
+        brew_prefix = get_brew_prefix()
+        texinfo_bin = Path(brew_prefix) / "opt" / "texinfo" / "bin"
+        if texinfo_bin.exists():
+            env["PATH"] = f"{texinfo_bin}:{env.get('PATH', '')}"
 
     return env
 
@@ -201,12 +215,11 @@ def configure(os_type):
 
         # Core useful features.
         "--with-modules",
-        "--with-json",
         "--with-xml2",
         "--with-gnutls",
 
         # Native compilation.
-        "--with-native-compilation",
+        "--with-native-compilation=aot",
 
         # Tree-sitter.
         "--with-tree-sitter",
@@ -224,30 +237,29 @@ def configure(os_type):
             "--with-harfbuzz",
         ]
 
-    run(flags, cwd=SRC)
+    return flags
 
 
 # ---------------------------------------------------------------------------
-# Build
+# Build & Install
 # ---------------------------------------------------------------------------
 
-def build():
+def build(os_type):
+    make_cmd = get_make_command(os_type)
     run(
-        ["make", f"-j{JOBS}"],
+        [make_cmd, f"-j{JOBS}"],
         cwd=SRC,
     )
 
 
-# ---------------------------------------------------------------------------
-# Install
-# ---------------------------------------------------------------------------
-
 def install(os_type):
+    make_cmd = get_make_command(os_type)
+
     if os_type == "macos":
 
         # Build/install the normal Emacs files first.
         run(
-            ["make", "install"],
+            [make_cmd, "install"],
             cwd=SRC,
         )
 
@@ -310,7 +322,7 @@ def install(os_type):
 
     else:
         run(
-            ["sudo", "make", "install"],
+            ["sudo", make_cmd, "install"],
             cwd=SRC,
         )
 
@@ -328,14 +340,8 @@ def main():
         "version",
         choices=["stable", "latest"],
         nargs="?",
-        default="stable",
+        default="latest",
         help="stable release or latest master",
-    )
-
-    parser.add_argument(
-        "--deps",
-        action="store_true",
-        help="Install build dependencies first",
     )
 
     args = parser.parse_args()
@@ -354,16 +360,14 @@ def main():
     print(f"Version  : {args.version}")
     print(f"Jobs     : {JOBS}")
 
-    # Basic tools.
-    for cmd in ["git", "make"]:
-        command(cmd)
-
+    # Basic tools check
     if os_type == "macos":
-        command("clang")
+        if not Path("/usr/bin/clang").exists():
+            die("Apple Xcode Command Line Tools ('/usr/bin/clang') are missing. Run 'xcode-select --install'.")
 
-    # Optional dependency installation.
-    if args.deps:
-        deps(os_type)
+    # Always install/ensure dependencies by default
+    print("\nEnsuring dependencies are installed...")
+    deps(os_type)
 
     # Existing checkout is updated; missing checkout is cloned.
     update_source(args.version)
@@ -373,8 +377,11 @@ def main():
 
     env = environment(os_type)
 
-    configure(os_type)
-    build()
+    # Run configuration with custom env flags
+    flags = configure(os_type)
+    run(flags, cwd=SRC, env=env)
+
+    build(os_type)
     install(os_type)
 
     print(
