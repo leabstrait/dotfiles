@@ -148,6 +148,7 @@ truncate-lines t)
 (up . left)
 (down . left)))
 
+(when (not (eq system-type 'darwin))
 (use-package ligature
   :load-path "path-to-ligature-repo"
   :config
@@ -219,6 +220,7 @@ truncate-lines t)
   ;; Enables ligature checks globally in all buffers. You can also do it
   ;; per mode with `ligature-mode'.
   (global-ligature-mode t))
+                          )
 
 (load-theme 'modus-vivendi t)
 

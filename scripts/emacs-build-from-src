@@ -288,11 +288,6 @@ def environment(os_type):
     env = os.environ.copy()
 
     if os_type == "macos":
-        # Point directly to Apple's native Clang and standard C++ compiler
-        env["CC"] = "/usr/bin/clang"
-        env["CXX"] = "/usr/bin/clang++"
-
-        # Only add texinfo to PATH if needed, without messing up system paths
         brew_prefix = get_brew_prefix()
         texinfo_bin = Path(brew_prefix) / "opt" / "texinfo" / "bin"
         if texinfo_bin.exists():
@@ -323,6 +318,8 @@ def configure(os_type):
 
     if os_type == "macos":
         flags += [
+            "CC=/usr/bin/clang",
+            "CXX=/usr/bin/clang++",
             "--with-ns",
         ]
 
@@ -381,9 +378,39 @@ def install(os_type):
             APP.parent,
         ])
 
-        # Convenient CLI.
-        cli = APP / "Contents" / "MacOS" / "Emacs"
+        # Clean up local build artifact 'nextstep/Emacs.app' after copying
+        print(f"\nCleaning up local build artifact: {app}")
+        shutil.rmtree(app, ignore_errors=True)
 
+        # Patch Info.plist to inject runtime environment variables for libgccjit & native-comp
+        brew_prefix = get_brew_prefix()
+        gcc_lib_base = Path(brew_prefix) / "opt" / "gcc" / "lib" / "gcc" / "current"
+
+        libgccjit_paths = [str(gcc_lib_base), f"{brew_prefix}/lib"]
+        if gcc_lib_base.exists():
+            subdirs = list(gcc_lib_base.glob("gcc/*/*"))
+            libgccjit_paths.extend([str(d) for d in subdirs])
+
+        sdk_path = "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib"
+        if Path(sdk_path).exists():
+            libgccjit_paths.append(sdk_path)
+
+        library_path_env = ":".join(libgccjit_paths)
+        path_env = f"{brew_prefix}/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+
+        print("\nPatching Emacs.app Info.plist with LSEnvironment variables...")
+        run([
+            "sudo", "defaults", "write", f"{APP}/Contents/Info.plist",
+            "LSEnvironment", "-dict",
+            "LIBRARY_PATH", library_path_env,
+            "PATH", path_env
+        ])
+        run([
+            "sudo", "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister",
+            "-f", str(APP)
+        ])
+
+        # Convenient CLI wrappers
         run([
             "sudo",
             "mkdir",
@@ -391,31 +418,23 @@ def install(os_type):
             "/usr/local/bin",
         ])
 
-        run([
-            "sudo",
-            "ln",
-            "-sf",
-            cli,
-            "/usr/local/bin/emacs",
-        ])
+        wrapper_path = Path("/usr/local/bin/emacs")
+        wrapper_content = f"""#!/bin/sh
+exec {APP}/Contents/MacOS/Emacs "$@"
+"""
+        print(f"\nCreating CLI wrapper -> {wrapper_path}")
+        run(["sudo", "sh", "-c", f"cat << 'EOF' > {wrapper_path}\n{wrapper_content}\nEOF"])
+        run(["sudo", "chmod", "+x", wrapper_path])
 
-        client = (
-            APP
-            / "Contents"
-            / "MacOS"
-            / "bin"
-            / "emacsclient"
-        )
-
-        if client.exists():
-            run([
-                "sudo",
-                "ln",
-                "-sf",
-                client,
-                "/usr/local/bin/emacsclient",
-            ])
-
+        # Do the same for emacsclient if it exists
+        client_target = APP / "Contents" / "MacOS" / "bin" / "emacsclient"
+        client_wrapper = Path("/usr/local/bin/emacsclient")
+        if client_target.exists():
+            client_content = f"""#!/bin/sh
+exec {client_target} "$@"
+"""
+            run(["sudo", "sh", "-c", f"cat << 'EOF' > {client_wrapper}\n{client_content}\nEOF"])
+            run(["sudo", "chmod", "+x", client_wrapper])
     else:
         run(
             ["sudo", make_cmd, "install"],
