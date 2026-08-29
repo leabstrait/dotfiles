@@ -7,8 +7,13 @@
 # ---------------------------------------------------------------------
 # 1. PATH CONFIGURATION & TOOLCHAIN SETUP
 # ---------------------------------------------------------------------
-export PATH="$HOME/.local/bin:$PATH"
 
+echo $PATH
+
+export PATH="$HOME/.local/bin:$PATH"
+echo "=============================="
+
+echo $PATH
 # case "$(uname -s)" in
 #     Darwin) # macOS Homebrew GNU Toolchain Overrides
 #         if [[ -n "$HOMEBREW_PREFIX" ]]; then
@@ -116,5 +121,11 @@ if command -v starship >/dev/null 2>&1; then
 fi
 
 if [[ -z "${SSH_CONNECTION}" ]]; then
-   export SSH_AUTH_SOCK="$XDG_RUNTIME_DIR/ssh-agent.socket"
+    if [[ "$(uname)" == "Darwin" ]]; then
+        # macOS: Fetch the native launchd socket if missing
+        export SSH_AUTH_SOCK="${SSH_AUTH_SOCK:-$(launchctl getenv SSH_AUTH_SOCK)}"
+    elif [[ "$(uname)" == "Linux" ]]; then
+        # Linux: Use your standard systemd user socket
+        export SSH_AUTH_SOCK="$XDG_RUNTIME_DIR/ssh-agent.socket"
+    fi
 fi

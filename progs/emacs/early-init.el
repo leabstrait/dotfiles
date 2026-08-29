@@ -58,3 +58,25 @@
 (setq-default line-spacing 0.12)
 
 (prefer-coding-system 'utf-8)
+
+;;(when (eq system-type 'darwin)
+;;  (let* ((brew-bin (or (executable-find "brew")
+;;                       (if (file-exists-p "/opt/homebrew/bin/brew") "/opt/homebrew/bin/brew" "/usr/local/bin/brew")))
+;;         (brew-prefix (when brew-bin (string-trim (shell-command-to-string (concat brew-bin " --prefix"))))))
+;;    (when brew-prefix
+;;      (let* ((gcc-prefix (concat brew-prefix "/opt/gcc"))
+;;             (gcc-lib-dir (concat gcc-prefix "/lib/gcc/current"))
+;;             ;; Find the architecture-specific subfolder (e.g., aarch64-apple-darwinXX or x86_64-apple-darwinXX)
+;;             (target-subdirs (file-expand-wildcards (concat gcc-lib-dir "/gcc/*/*")))
+;;             (paths (delete-dups
+;;                     (append (list gcc-lib-dir gcc-prefix)
+;;                             target-subdirs
+;;                             (list (concat brew-prefix "/lib"))))))
+;;        ;; Inject into LIBRARY_PATH so libgccjit finds the driver and specs
+;;        (let ((existing (split-string (or (getenv "LIBRARY_PATH") "") ":" t)))
+;;          (setenv "LIBRARY_PATH" (mapconcat #'identity (delete-dups (append paths existing)) ":"))))
+;;
+;;      ;; Ensure macOS SDK headers are reachable
+;;      (let ((sdk-path "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib"))
+;;        (when (file-exists-p sdk-path)
+;;          (setenv "LIBRARY_PATH" (concat sdk-path ":" (getenv "LIBRARY_PATH"))))))))

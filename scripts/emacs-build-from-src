@@ -1,66 +1,300 @@
 #!/usr/bin/env python3
 
+"""
+GNU Emacs source builder for macOS and Arch Linux.
+
+Expected repository layout:
+
+    ~/ws/i/emacs/
+    ├── .git/
+    └── worktrees/
+        ├── upstream/
+        └── build/
+            ├── macos/
+            └── arch/
+
+The repository is assumed to already exist as a bare repository.
+
+This script NEVER clones Emacs.
+
+macOS
+-----
+
+The macOS build uses Apple's clang for the Emacs build itself and Homebrew
+GCC/libgccjit for native compilation.
+
+The finished Emacs.app is made self-contained with respect to the Homebrew
+runtime used by native compilation.
+
+The macOS pipeline is:
+
+    build Emacs
+        |
+        v
+    make install
+        |
+        v
+    discover actual Homebrew GCC/libgccjit
+        |
+        v
+    discover GCC runtime/support files using GCC itself
+        |
+        v
+    recursively discover Homebrew Mach-O dependencies
+        |
+        v
+    bundle required dylibs/frameworks
+        |
+        v
+    bundle GCC compiler support files
+        |
+        v
+    rewrite Mach-O install names/rpaths
+        |
+        v
+    generate native-comp site-start.el
+        |
+        v
+    modify Info.plist
+        |
+        v
+    install custom icon
+        |
+        v
+    sign nested code from inside outward
+        |
+        v
+    verify signature
+        |
+        v
+    install into /Applications
+        |
+        v
+    verify installed copy
+        |
+        v
+    perform real native compilation test
+
+A future Homebrew GCC upgrade therefore does not change an already-installed
+Emacs.app.
+
+A subsequent invocation of this script discovers the currently installed
+GCC/libgccjit and builds a new self-contained application.
+
+Examples:
+
+    ./build-emacs.py
+    ./build-emacs.py latest
+    ./build-emacs.py stable
+
+    ./build-emacs.py latest --no-deps
+    ./build-emacs.py latest --jobs 12
+    ./build-emacs.py latest --keep-build
+
+    # Ad-hoc signing is the default on macOS.
+    ./build-emacs.py latest --sign
+
+    # Explicit Developer ID signing.
+    ./build-emacs.py latest \
+        --sign "Developer ID Application: Your Name (TEAMID)"
+
+    # Disable signing.
+    ./build-emacs.py latest --no-sign
+
+    ./build-emacs.py --uninstall
+"""
+
 import argparse
-from datetime import datetime
 import os
 import platform
+import plistlib
+import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 
-# ---------------------------------------------------------------------------
+# ============================================================================
 # Configuration
-# ---------------------------------------------------------------------------
+# ============================================================================
 
-SRC = Path.home() / "ws" / "i" / "emacs"
-REPO = "https://https.git.savannah.gnu.org/git/emacs.git/"
+BASE = Path.home() / "ws" / "i" / "emacs"
 
-# macOS:
-APP = Path("/Applications/Emacs.app")
+BARE_REPO = BASE / ".git"
 
-# Linux:
+UPSTREAM_WORKTREE = BASE / "worktrees" / "upstream"
+
+BUILD_ROOT = BASE / "worktrees" / "build"
+
+MACOS_BUILD = BUILD_ROOT / "macos"
+ARCH_BUILD = BUILD_ROOT / "arch"
+
+ICON_SRC = UPSTREAM_WORKTREE / "etc" / "icon.png"
+
+MACOS_APP = Path("/Applications/Emacs.app")
+
 PREFIX = Path("/usr/local")
+
+UPSTREAM_URL = "https://git.savannah.gnu.org/git/emacs.git"
+UPSTREAM_MIRROR_URL = "https://github.com/emacs-mirror/emacs.git"
+
+GIT_TIMEOUT = 60
 
 JOBS = os.cpu_count() or 4
 
-# Dependency tracking lists for uninstallation logic
+
+# ============================================================================
+# Dependencies
+# ============================================================================
+
 MACOS_DEPS = [
-    "texlive", "autoconf", "automake", "pkg-config", "texinfo",
-    "make", "gcc", "libgccjit", "tree-sitter", "gnutls",
-    "jansson", "libxml2", "jpeg", "giflib", "libtiff", "webp"
+    "autoconf",
+    "automake",
+    "pkgconf",
+    "texinfo",
+    "make",
+
+    "gcc",
+    "libgccjit",
+
+    "tree-sitter",
+    "gnutls",
+    "jansson",
+    "libxml2",
+    "sqlite",
+    "cairo",
+    "harfbuzz",
+
+    "jpeg-turbo",
+    "giflib",
+    "libtiff",
+    "webp",
+    "libpng",
+
+    "cmake",
 ]
 
 ARCH_DEPS = [
-    "base-devel", "git", "gcc", "libgccjit", "tree-sitter",
-    "jansson", "libxml2", "gnutls", "gtk3", "texinfo",
-    "harfbuzz", "cairo", "texlive"
+    "base-devel",
+    "git",
+    "gcc",
+    "libgccjit",
+    "tree-sitter",
+    "jansson",
+    "libxml2",
+    "gnutls",
+    "gtk3",
+    "texinfo",
+    "harfbuzz",
+    "cairo",
+    "sqlite",
 ]
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
+# ============================================================================
+# Logging / subprocess
+# ============================================================================
 
-def run(cmd, cwd=None, env=None):
-    print("\n$", " ".join(map(str, cmd)))
-    subprocess.run(cmd, cwd=cwd, env=env, check=True)
-
-
-def die(msg):
-    print(f"\nERROR: {msg}")
-    sys.exit(1)
+def log(message=""):
+    print(message, flush=True)
 
 
-def command(name):
-    if not shutil.which(name):
+def die(message, code=1):
+    log()
+    log(f"*** ERROR: {message}")
+    sys.exit(code)
+
+
+def command_exists(name):
+    return shutil.which(name) is not None
+
+
+def require_command(name):
+    if not command_exists(name):
         die(f"'{name}' is required but was not found")
 
 
-# ---------------------------------------------------------------------------
+def run(
+    cmd,
+    cwd=None,
+    env=None,
+    check=True,
+    capture_output=False,
+    timeout=None,
+):
+    cwd = Path(cwd) if cwd else None
+
+    cmd = [str(x) for x in cmd]
+
+    display = " ".join(cmd)
+
+    if cwd:
+        log(f"\n>>> {display}")
+        log(f"    cwd: {cwd}")
+    else:
+        log(f"\n>>> {display}")
+
+    try:
+        result = subprocess.run(
+            cmd,
+            cwd=cwd,
+            env=env,
+            check=check,
+            text=True,
+            capture_output=capture_output,
+            timeout=timeout,
+        )
+
+        if capture_output and result.stdout:
+            log(result.stdout.rstrip())
+
+        if capture_output and result.stderr:
+            log(result.stderr.rstrip())
+
+        return result
+
+    except subprocess.TimeoutExpired:
+        log()
+        log(f"!!! Command timed out after {timeout}s:")
+        log(f"    {display}")
+
+        raise subprocess.CalledProcessError(
+            returncode=124,
+            cmd=cmd,
+        )
+
+    except subprocess.CalledProcessError as exc:
+        log()
+        log(f"!!! Command failed with exit code {exc.returncode}")
+        log(f"    {display}")
+
+        if exc.stdout:
+            log("\n--- stdout ---")
+            log(exc.stdout.rstrip())
+
+        if exc.stderr:
+            log("\n--- stderr ---")
+            log(exc.stderr.rstrip())
+
+        raise
+
+
+def command_output(cmd, cwd=None, check=True):
+    result = run(
+        cmd,
+        cwd=cwd,
+        check=check,
+        capture_output=True,
+    )
+
+    return result.stdout.strip()
+
+
+# ============================================================================
 # Platform
-# ---------------------------------------------------------------------------
+# ============================================================================
 
 def system():
     name = platform.system()
@@ -71,447 +305,4049 @@ def system():
     if name == "Linux" and Path("/etc/arch-release").exists():
         return "arch"
 
-    die("Only macOS and Arch Linux are supported")
+    die(
+        "Only macOS and Arch Linux are supported.\n"
+        f"Detected platform: {name}"
+    )
 
 
-def get_brew_prefix():
-    try:
-        return subprocess.check_output(["brew", "--prefix"], text=True).strip()
-    except Exception:
-        return "/opt/homebrew"
+# ============================================================================
+# Repository validation
+# ============================================================================
+
+def validate_layout():
+    if not BARE_REPO.exists():
+        die(
+            f"Bare repository not found:\n"
+            f"    {BARE_REPO}\n\n"
+            "This script expects the existing repository to already be bare."
+        )
+
+    if not (BARE_REPO / "HEAD").exists():
+        die(f"{BARE_REPO} does not appear to be a bare Git repository.")
+
+    if not UPSTREAM_WORKTREE.exists():
+        die(
+            f"Upstream worktree does not exist:\n"
+            f"    {UPSTREAM_WORKTREE}"
+        )
+
+    git_dir = command_output(
+        ["git", "rev-parse", "--git-dir"],
+        cwd=UPSTREAM_WORKTREE,
+    )
+
+    if not git_dir:
+        die(f"{UPSTREAM_WORKTREE} is not a Git worktree.")
+
+    BUILD_ROOT.mkdir(parents=True, exist_ok=True)
 
 
-def get_make_command(os_type):
-    if os_type == "macos":
-        # Use GNU make absolute path directly without messing with shell PATH
-        brew_prefix = get_brew_prefix()
-        gmake_path = Path(brew_prefix) / "opt" / "make" / "libexec" / "gnubin" / "make"
-        if gmake_path.exists():
-            return str(gmake_path)
-        return "gmake"
-    return "make"
-
-
-# ---------------------------------------------------------------------------
-# Dependencies
-# ---------------------------------------------------------------------------
-
-def deps(os_type):
-    if os_type == "macos":
-        command("brew")
-        run(["brew", "install"] + MACOS_DEPS)
-    else:
-        run([
-            "sudo", "pacman", "-Syu",
-            "--needed",
-            "--noconfirm",
-        ] + ARCH_DEPS)
-
-
-# ---------------------------------------------------------------------------
-# Source
-# ---------------------------------------------------------------------------
-
-def clean_repo():
-    print("\nCleaning build artifacts while preserving local changes...")
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    stash_msg = f"auto-stash-for-clean-build-at-{timestamp}"
-
-    subprocess.run(["git", "stash", "-u", "-m", stash_msg], cwd=SRC, check=False)
-    subprocess.run(["git", "clean", "-fdX"], cwd=SRC, check=True)
-    subprocess.run(["git", "stash", "pop"], cwd=SRC, check=False)
-
-
-def update_source(mode):
-    """
-    mode:
-        stable -> latest stable Emacs tag
-        latest -> latest master commit
-    """
-
-    SRC.parent.mkdir(parents=True, exist_ok=True)
-
-    if not (SRC / ".git").exists():
-
-        if SRC.exists():
-            die(f"{SRC} exists but is not a git repository")
-
-        run([
-            "git",
-            "clone",
-            REPO,
-            SRC,
-        ])
-
-    else:
-        run(["git", "fetch", "--tags", "origin"], cwd=SRC)
-
-    if mode == "latest":
-
-        run(["git", "checkout", "master"], cwd=SRC)
-        run(["git", "reset", "--hard", "origin/master"], cwd=SRC)
-
-        return
-
-    # Latest stable release tag using version sort order so numbers compare properly.
-    tags = subprocess.check_output(
+def git_worktree_list():
+    return command_output(
         [
             "git",
-            "tag",
-            "--list",
-            "emacs-[0-9]*",
-            "--sort=-version:refname",
-        ],
-        cwd=SRC,
-        text=True,
+            "--git-dir",
+            str(BARE_REPO),
+            "worktree",
+            "list",
+        ]
+    )
+
+
+def ensure_worktree_registered(path):
+    listing = git_worktree_list()
+
+    resolved = str(path.resolve())
+
+    if resolved not in listing:
+        die(
+            f"Expected Git worktree is not registered:\n"
+            f"    {path}\n\n"
+            "Registered worktrees:\n"
+            f"{listing}"
+        )
+
+
+# ============================================================================
+# Git
+# ============================================================================
+
+def git(cwd, *args, check=True, capture_output=False, timeout=None):
+    return run(
+        ["git", *args],
+        cwd=cwd,
+        check=check,
+        capture_output=capture_output,
+        timeout=timeout,
+    )
+
+
+def git_output(cwd, *args, check=True):
+    return command_output(
+        ["git", *args],
+        cwd=cwd,
+        check=check,
+    )
+
+
+def current_branch():
+    return git_output(
+        UPSTREAM_WORKTREE,
+        "branch",
+        "--show-current",
+    )
+
+
+def current_commit(cwd):
+    return git_output(
+        cwd,
+        "rev-parse",
+        "HEAD",
+    )
+
+
+def ensure_clean_tracked_state():
+    result = git(
+        UPSTREAM_WORKTREE,
+        "status",
+        "--porcelain",
+        capture_output=True,
+    )
+
+    modified = []
+
+    for line in result.stdout.splitlines():
+        if not line:
+            continue
+
+        status = line[:2]
+
+        if status == "??":
+            continue
+
+        modified.append(line)
+
+    if modified:
+        die(
+            "The upstream worktree contains tracked changes.\n\n"
+            + "\n".join(modified)
+            + "\n\n"
+            "Commit or stash those changes before running the builder."
+        )
+
+
+def ensure_upstream_remotes():
+    remotes = git_output(
+        UPSTREAM_WORKTREE,
+        "remote",
+    ).splitlines()
+
+    if "upstream" not in remotes:
+        git(
+            UPSTREAM_WORKTREE,
+            "remote",
+            "add",
+            "upstream",
+            UPSTREAM_URL,
+        )
+    else:
+        git(
+            UPSTREAM_WORKTREE,
+            "remote",
+            "set-url",
+            "upstream",
+            UPSTREAM_URL,
+        )
+
+    if "upstream-mirror" not in remotes:
+        git(
+            UPSTREAM_WORKTREE,
+            "remote",
+            "add",
+            "upstream-mirror",
+            UPSTREAM_MIRROR_URL,
+        )
+    else:
+        git(
+            UPSTREAM_WORKTREE,
+            "remote",
+            "set-url",
+            "upstream-mirror",
+            UPSTREAM_MIRROR_URL,
+        )
+
+
+def fetch_upstream():
+    ensure_upstream_remotes()
+
+    for remote in ("upstream", "upstream-mirror"):
+        log()
+        log(f"Fetching Emacs from {remote}...")
+
+        try:
+            git(
+                UPSTREAM_WORKTREE,
+                "fetch",
+                "--prune",
+                "--tags",
+                remote,
+                timeout=GIT_TIMEOUT,
+            )
+
+            return remote
+
+        except subprocess.CalledProcessError:
+            log(f"WARNING: fetch from {remote} failed.")
+
+    die("Unable to fetch from either Emacs repository.")
+
+
+def newest_stable_tag():
+    tags = git_output(
+        UPSTREAM_WORKTREE,
+        "tag",
+        "--list",
+        "emacs-[0-9]*",
+        "--sort=-version:refname",
     ).splitlines()
 
     if not tags:
-        die("No Emacs release tags found")
+        die("No Emacs stable release tags were found.")
 
-    tag = tags[0]
-
-    print(f"\nUsing stable release: {tag}")
-
-    run(["git", "checkout", tag], cwd=SRC)
+    return tags[0]
 
 
-# ---------------------------------------------------------------------------
-# Uninstall
-# ---------------------------------------------------------------------------
+def update_upstream(mode):
+    ensure_clean_tracked_state()
 
-def uninstall(os_type):
-    print(
-        "\n"
-        "========================================\n"
-        " GNU Emacs uninstaller\n"
-        "========================================"
+    remote = fetch_upstream()
+
+    branch = current_branch()
+
+    if branch != "master":
+        die(
+            "Expected upstream worktree to be on branch 'master', "
+            f"but it is on '{branch}'."
+        )
+
+    git(
+        UPSTREAM_WORKTREE,
+        "checkout",
+        "master",
     )
 
+    git(
+        UPSTREAM_WORKTREE,
+        "reset",
+        "--hard",
+        f"{remote}/master",
+    )
+
+    if mode == "latest":
+        return "master"
+
+    if mode == "stable":
+        tag = newest_stable_tag()
+
+        log()
+        log(f"Latest stable Emacs release: {tag}")
+
+        return tag
+
+    die(f"Unknown build mode: {mode}")
+
+
+# ============================================================================
+# Build worktrees
+# ============================================================================
+
+def build_worktree_for(os_type):
     if os_type == "macos":
-        if APP.exists():
-            print(f"\nRemoving {APP}...")
-            run(["sudo", "rm", "-rf", APP])
+        return MACOS_BUILD
 
-        for cli_path in [Path("/usr/local/bin/emacs"), Path("/usr/local/bin/emacsclient")]:
-            if cli_path.exists() or cli_path.is_symlink():
-                print(f"Removing symlink {cli_path}...")
-                run(["sudo", "rm", "-f", cli_path])
+    return ARCH_BUILD
 
-        print("\nChecking Homebrew dependencies for safety removal...")
-        installed_brew = subprocess.check_output(["brew", "list", "--formula"], text=True).splitlines()
 
-        # Filter dependencies that are actively required by other installed formulae
-        safe_to_remove = []
-        for pkg in MACOS_DEPS:
-            if pkg in installed_brew:
-                try:
-                    # Check if any other package requires it
-                    deps_check = subprocess.check_output(["brew", "uses", "--installed", pkg], text=True).splitlines()
-                    # Filter out emacs deps from the uses list
-                    external_dependents = [d for d in deps_check if d not in MACOS_DEPS and d != "emacs"]
-                    if not external_dependents:
-                        safe_to_remove.append(pkg)
-                    else:
-                        print(f"Skipping {pkg}: required by other packages ({', '.join(external_dependents)})")
-                except Exception:
-                    safe_to_remove.append(pkg)
+def ensure_build_worktree(os_type):
+    build_dir = build_worktree_for(os_type)
+    branch = f"build/{os_type}"
 
-        if safe_to_remove:
-            print(f"\nUninstalling unused Homebrew dependencies: {', '.join(safe_to_remove)}")
-            run(["brew", "uninstall"] + safe_to_remove)
-        else:
-            print("\nNo isolated Homebrew dependencies found to uninstall.")
+    ensure_worktree_registered(UPSTREAM_WORKTREE)
 
-    elif os_type == "arch":
-        if (SRC / "Makefile").exists():
-            print("\nUninstalling via make target...")
-            make_cmd = get_make_command(os_type)
-            run(["sudo", make_cmd, "uninstall"], cwd=SRC)
-        else:
-            print("\nSource Makefile not found; skipping make uninstall step.")
+    listing = git_worktree_list()
 
-        print("\nChecking Arch packages for safe removal...")
-        installed_explicit = set(subprocess.check_output(["pacman", "-Qqe"], text=True).splitlines())
+    if str(build_dir.resolve()) in listing:
+        return build_dir
 
-        safe_to_remove = []
-        for pkg in ARCH_DEPS:
-            # Skip base-devel group or core packages if needed, check if explicitly or implicitly installed
-            try:
-                pkg_check = subprocess.run(["pacman", "-Qi", pkg], capture_output=True, text=True)
-                if pkg_check.returncode == 0:
-                    # Check if required by other explicitly installed packages outside our list
-                    required_by_line = [l for l in pkg_check.stdout.splitlines() if "Required By" in l]
-                    is_required_externally = False
-                    if required_by_line:
-                        reqs = required_by_line[0].split(":")[-1].strip()
-                        if reqs and reqs != "None":
-                            active_reqs = [r.strip() for r in reqs.split()]
-                            external_reqs = [r for r in active_reqs if r not in ARCH_DEPS]
-                            if external_reqs:
-                                is_required_externally = True
+    build_dir.parent.mkdir(parents=True, exist_ok=True)
 
-                    if not is_required_externally:
-                        safe_to_remove.append(pkg)
-                    else:
-                        print(f"Skipping {pkg}: required by external packages.")
-            except Exception:
-                continue
+    log()
+    log(f"Creating build worktree: {build_dir}")
 
-        if safe_to_remove:
-            print(f"\nRemoving safe Arch dependencies and unneeded orphans...")
-            # Remove packages and clean up cascading unused dependencies safely
-            run(["sudo", "pacman", "-Rns", "--noconfirm"] + safe_to_remove)
+    existing_branch = subprocess.run(
+        [
+            "git",
+            "--git-dir",
+            str(BARE_REPO),
+            "show-ref",
+            "--verify",
+            f"refs/heads/{branch}",
+        ],
+        text=True,
+        capture_output=True,
+    )
 
-        # Clean up remaining true orphan dependencies safely
-        try:
-            orphans = subprocess.check_output(["pacman", "-Qdtq"], text=True).splitlines()
-            if orphans:
-                print(f"\nCleaning up secondary orphaned packages: {', '.join(orphans)}")
-                run(["sudo", "pacman", "-Rns", "--noconfirm"] + orphans)
-        except Exception:
-            pass
+    if existing_branch.returncode == 0:
+        git(
+            UPSTREAM_WORKTREE,
+            "worktree",
+            "add",
+            str(build_dir),
+            branch,
+        )
+    else:
+        git(
+            UPSTREAM_WORKTREE,
+            "worktree",
+            "add",
+            "-b",
+            branch,
+            str(build_dir),
+            "master",
+        )
 
-    print(
-        "\n"
-        "========================================\n"
-        " UNINSTALL SUCCESS\n"
-        "========================================"
+    return build_dir
+
+
+def reset_build_worktree(build_dir, revision):
+    log()
+    log("Resetting build worktree:")
+    log(f"    {build_dir}")
+    log(f"    revision: {revision}")
+
+    git(
+        build_dir,
+        "reset",
+        "--hard",
+        revision,
+    )
+
+    git(
+        build_dir,
+        "clean",
+        "-fdX",
     )
 
 
-# ---------------------------------------------------------------------------
-# Environment & Configure
-# ---------------------------------------------------------------------------
+# ============================================================================
+# Homebrew
+# ============================================================================
 
-def environment(os_type):
+def brew_prefix():
+    require_command("brew")
+
+    return Path(
+        command_output(["brew", "--prefix"])
+    ).resolve()
+
+
+def brew_prefix_for(formula):
+    require_command("brew")
+
+    result = subprocess.run(
+        ["brew", "--prefix", formula],
+        text=True,
+        capture_output=True,
+    )
+
+    if result.returncode != 0:
+        return None
+
+    value = result.stdout.strip()
+
+    if not value:
+        return None
+
+    path = Path(value)
+
+    if not path.exists():
+        return None
+
+    return path.resolve()
+
+
+def brew_install(formulas):
+    require_command("brew")
+
+    run(
+        ["brew", "install", *formulas],
+    )
+
+
+def ensure_macos_dependencies():
+    require_command("brew")
+
+    log("\nEnsuring Homebrew dependencies...")
+
+    brew_install(MACOS_DEPS)
+
+    if brew_prefix_for("gcc") is None:
+        die("Homebrew GCC is not installed.")
+
+    if brew_prefix_for("libgccjit") is None:
+        die("Homebrew libgccjit is not installed.")
+
+
+def ensure_arch_dependencies():
+    require_command("sudo")
+    require_command("pacman")
+
+    log("\nEnsuring Arch Linux dependencies...")
+
+    run(
+        [
+            "sudo",
+            "pacman",
+            "-Syu",
+            "--needed",
+            "--noconfirm",
+            *ARCH_DEPS,
+        ]
+    )
+
+
+def ensure_dependencies(os_type):
+    if os_type == "macos":
+        ensure_macos_dependencies()
+    else:
+        ensure_arch_dependencies()
+
+
+# ============================================================================
+# Make
+# ============================================================================
+
+def make_command(os_type):
+    if os_type == "arch":
+        require_command("make")
+        return "make"
+
+    brew = brew_prefix()
+
+    candidates = [
+        brew / "opt" / "make" / "libexec" / "gnubin" / "make",
+        brew / "bin" / "gmake",
+    ]
+
+    for candidate in candidates:
+        if candidate.exists():
+            return str(candidate)
+
+    if command_exists("gmake"):
+        return "gmake"
+
+    if command_exists("make"):
+        return "make"
+
+    die("GNU make was not found.")
+
+
+# ============================================================================
+# Environment helpers
+# ============================================================================
+
+def prepend_path(env, directory):
+    directory = str(directory)
+
+    old = env.get("PATH", "")
+
+    if old:
+        env["PATH"] = f"{directory}:{old}"
+    else:
+        env["PATH"] = directory
+
+
+def append_unique_path(values, path):
+    path = Path(path)
+
+    if path.exists():
+        text = str(path)
+
+        if text not in values:
+            values.append(text)
+
+
+# ============================================================================
+# GCC discovery
+# ============================================================================
+
+def gcc_versioned_candidates(gcc_prefix):
+    candidates = []
+
+    bin_dir = gcc_prefix / "bin"
+
+    if not bin_dir.exists():
+        return candidates
+
+    for path in bin_dir.iterdir():
+        if not path.is_file():
+            continue
+
+        if not os.access(path, os.X_OK):
+            continue
+
+        if re.match(r"^gcc-\d+(?:\.\d+)*$", path.name):
+            candidates.append(path)
+
+    return sorted(
+        candidates,
+        key=lambda p: [
+            int(x)
+            for x in re.findall(r"\d+", p.name)
+        ],
+    )
+
+
+def gcc_command():
+    gcc_prefix = brew_prefix_for("gcc")
+
+    if not gcc_prefix:
+        die("Homebrew GCC prefix could not be determined.")
+
+    candidates = gcc_versioned_candidates(gcc_prefix)
+
+    if candidates:
+        return candidates[-1]
+
+    # Some installations may expose an unversioned driver.
+    unversioned = gcc_prefix / "bin" / "gcc"
+
+    if unversioned.exists() and os.access(unversioned, os.X_OK):
+        return unversioned
+
+    die(
+        "Unable to locate a Homebrew GNU GCC executable under:\n"
+        f"    {gcc_prefix / 'bin'}\n\n"
+        "Homebrew normally installs GNU GCC under a versioned name "
+        "such as gcc-16."
+    )
+
+
+def gcc_print_file(gcc, filename):
+    result = subprocess.run(
+        [
+            str(gcc),
+            f"-print-file-name={filename}",
+        ],
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+
+    value = result.stdout.strip()
+
+    if not value or value == filename:
+        return None
+
+    path = Path(value)
+
+    if not path.exists():
+        return None
+
+    return path.resolve()
+
+
+def gcc_print_prog(gcc, program):
+    result = subprocess.run(
+        [
+            str(gcc),
+            "-print-prog-name=" + program,
+        ],
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+
+    value = result.stdout.strip()
+
+    if not value:
+        return None
+
+    path = Path(value)
+
+    if not path.exists():
+        return None
+
+    return path.resolve()
+
+
+def gcc_search_dirs(gcc):
+    result = subprocess.run(
+        [
+            str(gcc),
+            "-print-search-dirs",
+        ],
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+
+    values = {}
+
+    for line in result.stdout.splitlines():
+        if ":" not in line:
+            continue
+
+        key, value = line.split(":", 1)
+
+        value = value.strip()
+
+        if value.startswith("="):
+            value = value[1:]
+
+        values[key.strip()] = [
+            Path(x).resolve()
+            for x in value.split(os.pathsep)
+            if x
+        ]
+
+    return values
+
+
+def find_libgccjit(libgccjit_prefix):
+    candidates = [
+        libgccjit_prefix / "lib" / "libgccjit.dylib",
+        libgccjit_prefix / "lib" / "libgccjit.0.dylib",
+    ]
+
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate.resolve()
+
+    matches = sorted(
+        [
+            p.resolve()
+            for p in (libgccjit_prefix / "lib").glob(
+                "libgccjit*.dylib"
+            )
+            if p.is_file()
+        ]
+    )
+
+    if matches:
+        return matches[-1]
+
+    matches = sorted(
+        [
+            p.resolve()
+            for p in libgccjit_prefix.rglob(
+                "libgccjit*.dylib"
+            )
+            if p.is_file()
+        ]
+    )
+
+    if matches:
+        return matches[-1]
+
+    die(
+        "Unable to locate libgccjit dylib under:\n"
+        f"    {libgccjit_prefix}"
+    )
+
+
+def gcc_runtime_info():
+    """
+    Discover GCC entirely from GCC's own driver.
+
+    In particular, libemutls_w.a is located with:
+
+        gcc -print-file-name=libemutls_w.a
+
+    rather than by globbing the Homebrew Cellar.
+    """
+
+    gcc_prefix = brew_prefix_for("gcc")
+    libgccjit_prefix = brew_prefix_for("libgccjit")
+
+    if not gcc_prefix:
+        die("Homebrew GCC was not found.")
+
+    if not libgccjit_prefix:
+        die("Homebrew libgccjit was not found.")
+
+    gcc = gcc_command()
+
+    version = command_output(
+        [
+            str(gcc),
+            "-dumpfullversion",
+            "-dumpversion",
+        ]
+    )
+
+    target = command_output(
+        [
+            str(gcc),
+            "-dumpmachine",
+        ]
+    )
+
+    base_version = command_output(
+        [
+            str(gcc),
+            "-dumpversion",
+        ]
+    )
+
+    search_dirs = gcc_search_dirs(gcc)
+
+    libemutls = gcc_print_file(
+        gcc,
+        "libemutls_w.a",
+    )
+
+    if not libemutls:
+        die(
+            "GCC could not locate libemutls_w.a.\n"
+            "Native compilation cannot be made self-contained without it."
+        )
+
+    runtime_dir = libemutls.parent
+
+    libgcc = gcc_print_file(
+        gcc,
+        "libgcc.a",
+    )
+
+    libgcc_eh = gcc_print_file(
+        gcc,
+        "libgcc_eh.a",
+    )
+
+    libgcc_s = (
+        gcc_print_file(gcc, "libgcc_s.1.1.dylib")
+        or gcc_print_file(gcc, "libgcc_s.1.dylib")
+        or gcc_print_file(gcc, "libgcc_s.dylib")
+    )
+
+    cc1 = gcc_print_prog(
+        gcc,
+        "cc1",
+    )
+
+    cc1plus = gcc_print_prog(
+        gcc,
+        "cc1plus",
+    )
+
+    collect2 = gcc_print_prog(
+        gcc,
+        "collect2",
+    )
+
+    lto1 = gcc_print_prog(
+        gcc,
+        "lto1",
+    )
+
+    # GCC itself is the source of truth for its internal layout. In
+    # particular, do not reconstruct libexec/gcc/<target>/<version> from
+    # Homebrew/GCC version strings: that is an implementation detail which
+    # can change across upgrades.
+    libexec_candidates = [
+        path.parent
+        for path in (cc1, cc1plus, collect2, lto1)
+        if path is not None
+    ]
+
+    libexec_dir = libexec_candidates[0] if libexec_candidates else None
+
+    if not libexec_dir or not libexec_dir.is_dir():
+        die(
+            "GCC could not locate its compiler support (libexec) directory.\n"
+            "Cannot make the bundled native compiler self-contained."
+        )
+
+    libgccjit = find_libgccjit(
+        libgccjit_prefix
+    )
+
+    log()
+    log("Homebrew GCC/JIT configuration:")
+    log(f"  GCC:             {gcc}")
+    log(f"  GCC prefix:      {gcc_prefix}")
+    log(f"  libgccjit prefix:{libgccjit_prefix}")
+    log(f"  version:         {version}")
+    log(f"  base version:    {base_version}")
+    log(f"  target:          {target}")
+    log(f"  libgccjit:       {libgccjit}")
+    log(f"  libemutls_w.a:   {libemutls}")
+    log(f"  GCC runtime dir: {runtime_dir}")
+    log(f"  GCC libexec dir: {libexec_dir}")
+
+    return {
+        "gcc_prefix": gcc_prefix,
+        "libgccjit_prefix": libgccjit_prefix,
+        "gcc": gcc,
+        "version": version,
+        "base_version": base_version,
+        "target": target,
+        "libgccjit": libgccjit,
+        "libemutls": libemutls,
+        "libgcc": libgcc,
+        "libgcc_eh": libgcc_eh,
+        "libgcc_s": libgcc_s,
+        "runtime_dir": runtime_dir,
+        "libexec_dir": libexec_dir,
+        "search_dirs": search_dirs,
+        "cc1": cc1,
+        "cc1plus": cc1plus,
+        "collect2": collect2,
+        "lto1": lto1,
+    }
+
+
+# ============================================================================
+# macOS build environment
+# ============================================================================
+
+def macos_environment():
     env = os.environ.copy()
 
-    if os_type == "macos":
-        brew_prefix = get_brew_prefix()
-        texinfo_bin = Path(brew_prefix) / "opt" / "texinfo" / "bin"
-        if texinfo_bin.exists():
-            env["PATH"] = f"{texinfo_bin}:{env.get('PATH', '')}"
+    brew = brew_prefix()
+
+    prepend_path(
+        env,
+        brew / "bin",
+    )
+
+    prepend_path(
+        env,
+        brew / "sbin",
+    )
+
+    make_opt = brew / "opt" / "make" / "libexec" / "gnubin"
+
+    if make_opt.exists():
+        prepend_path(
+            env,
+            make_opt,
+        )
+
+    texinfo_bin = brew / "opt" / "texinfo" / "bin"
+
+    if texinfo_bin.exists():
+        prepend_path(
+            env,
+            texinfo_bin,
+        )
+
+    include_paths = []
+    library_paths = []
+
+    append_unique_path(
+        include_paths,
+        brew / "include",
+    )
+
+    append_unique_path(
+        library_paths,
+        brew / "lib",
+    )
+
+    formulas = [
+        "libgccjit",
+        "gcc",
+        "gnutls",
+        "jansson",
+        "libxml2",
+        "sqlite",
+        "tree-sitter",
+        "cairo",
+        "harfbuzz",
+        "jpeg-turbo",
+        "giflib",
+        "libtiff",
+        "webp",
+        "libpng",
+    ]
+
+    for formula in formulas:
+        prefix = brew_prefix_for(formula)
+
+        if prefix:
+            append_unique_path(
+                include_paths,
+                prefix / "include",
+            )
+
+            append_unique_path(
+                library_paths,
+                prefix / "lib",
+            )
+
+    gcc_info = gcc_runtime_info()
+
+    append_unique_path(
+        include_paths,
+        gcc_info["gcc_prefix"] / "include",
+    )
+
+    append_unique_path(
+        include_paths,
+        gcc_info["libgccjit_prefix"] / "include",
+    )
+
+    append_unique_path(
+        library_paths,
+        gcc_info["runtime_dir"],
+    )
+
+    append_unique_path(
+        library_paths,
+        gcc_info["libgccjit"].parent,
+    )
+
+    sdk = Path(
+        "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
+    )
+
+    if sdk.exists():
+        append_unique_path(
+            include_paths,
+            sdk / "usr" / "include",
+        )
+
+        append_unique_path(
+            library_paths,
+            sdk / "usr" / "lib",
+        )
+
+    env["CPPFLAGS"] = " ".join(
+        f"-I{path}" for path in include_paths
+    )
+
+    env["CFLAGS"] = env.get(
+        "CFLAGS",
+        "",
+    )
+
+    env["LDFLAGS"] = " ".join(
+        f"-L{path}" for path in library_paths
+    )
+
+    env["CC"] = "/usr/bin/clang"
+    env["CXX"] = "/usr/bin/clang++"
+
+    env["LIBRARY_PATH"] = os.pathsep.join(
+        str(path)
+        for path in library_paths
+    )
+
+    env["C_INCLUDE_PATH"] = os.pathsep.join(
+        str(path)
+        for path in include_paths
+    )
+
+    env.pop(
+        "GCC_EXEC_PREFIX",
+        None,
+    )
+
+    env.pop(
+        "COMPILER_PATH",
+        None,
+    )
 
     return env
 
 
-# ---------------------------------------------------------------------------
+def arch_environment():
+    return os.environ.copy()
+
+
+def build_environment(os_type):
+    if os_type == "macos":
+        return macos_environment()
+
+    return arch_environment()
+
+
+# ============================================================================
+# Autoconf
+# ============================================================================
+
+def ensure_configure_script(build_dir):
+    configure = build_dir / "configure"
+
+    if configure.exists():
+        return configure
+
+    log("\nconfigure is missing; running autogen.sh...")
+
+    run(
+        ["./autogen.sh"],
+        cwd=build_dir,
+    )
+
+    if not configure.exists():
+        die(
+            f"autogen.sh completed but configure was not generated:\n"
+            f"    {configure}"
+        )
+
+    return configure
+
+
+# ============================================================================
 # Configure
-# ---------------------------------------------------------------------------
+# ============================================================================
 
-def configure(os_type):
+def configure_macos(build_dir, env):
+    configure = ensure_configure_script(build_dir)
+
     flags = [
-        "./configure",
+        str(configure),
 
-        # Core useful features.
-        "--with-modules",
-        "--with-xml2",
-        "--with-gnutls",
+        "--with-ns",
 
-        # Native compilation.
         "--with-native-compilation=aot",
-
-        # Tree-sitter.
+        "--with-modules",
         "--with-tree-sitter",
+        "--with-gnutls",
+        "--with-xml2",
+        "--with-sqlite3",
     ]
 
-    if os_type == "macos":
-        flags += [
-            "CC=/usr/bin/clang",
-            "CXX=/usr/bin/clang++",
-            "--with-ns",
-        ]
+    log("\nConfiguring macOS Emacs...")
 
-    elif os_type == "arch":
-        flags += [
-            "--with-pgtk",
-            "--with-cairo",
-            "--with-harfbuzz",
-        ]
-
-    return flags
-
-
-# ---------------------------------------------------------------------------
-# Build & Install
-# ---------------------------------------------------------------------------
-
-def build(os_type):
-    make_cmd = get_make_command(os_type)
     run(
-        [make_cmd, f"-j{JOBS}"],
-        cwd=SRC,
+        flags,
+        cwd=build_dir,
+        env=env,
     )
 
 
-def install(os_type):
-    make_cmd = get_make_command(os_type)
+def configure_arch(build_dir, env):
+    configure = ensure_configure_script(build_dir)
 
+    flags = [
+        str(configure),
+
+        "--with-pgtk",
+        "--with-cairo",
+        "--with-harfbuzz",
+
+        "--with-native-compilation",
+        "--with-modules",
+        "--with-tree-sitter",
+        "--with-gnutls",
+        "--with-xml2",
+        "--with-sqlite3",
+    ]
+
+    log("\nConfiguring Arch Linux Emacs...")
+
+    run(
+        flags,
+        cwd=build_dir,
+        env=env,
+    )
+
+
+def configure(build_dir, os_type, env):
     if os_type == "macos":
+        configure_macos(build_dir, env)
+    else:
+        configure_arch(build_dir, env)
 
-        # Build/install the normal Emacs files first.
-        run(
-            [make_cmd, "install"],
-            cwd=SRC,
+
+# ============================================================================
+# Build
+# ============================================================================
+
+def build(build_dir, os_type, env, jobs):
+    make = make_command(os_type)
+
+    log()
+    log("========================================")
+    log(" Building Emacs")
+    log("========================================")
+    log(f"Build directory: {build_dir}")
+    log(f"Make:            {make}")
+    log(f"Jobs:             {jobs}")
+
+    run(
+        [
+            make,
+            f"-j{jobs}",
+        ],
+        cwd=build_dir,
+        env=env,
+    )
+
+
+# ============================================================================
+# Mach-O helpers
+# ============================================================================
+
+def otool_dependencies(binary):
+    result = run(
+        [
+            "otool",
+            "-L",
+            str(binary),
+        ],
+        capture_output=True,
+    )
+
+    dependencies = []
+
+    for line in result.stdout.splitlines()[1:]:
+        line = line.strip()
+
+        if not line:
+            continue
+
+        dependencies.append(
+            line.split()[0]
         )
 
-        app = SRC / "nextstep" / "Emacs.app"
+    return dependencies
 
-        if not app.exists():
-            die(f"Emacs.app was not built: {app}")
 
-        print(f"\nInstalling {app} -> {APP}")
+def otool_rpaths(binary):
+    result = run(
+        [
+            "otool",
+            "-l",
+            str(binary),
+        ],
+        capture_output=True,
+    )
 
-        run([
-            "sudo",
-            "rm",
-            "-rf",
-            APP,
+    values = []
+
+    lines = result.stdout.splitlines()
+
+    for index, line in enumerate(lines):
+        if line.strip() != "cmd LC_RPATH":
+            continue
+
+        for following in lines[index:index + 10]:
+            stripped = following.strip()
+
+            if not stripped.startswith("path "):
+                continue
+
+            value = stripped.split(
+                " ",
+                1,
+            )[1]
+
+            value = value.split(
+                " (offset",
+                1,
+            )[0]
+
+            values.append(value)
+
+    return values
+
+
+def install_name(binary):
+    result = run(
+        [
+            "otool",
+            "-D",
+            str(binary),
+        ],
+        capture_output=True,
+        check=False,
+    )
+
+    if result.returncode != 0:
+        return None
+
+    lines = [
+        line.strip()
+        for line in result.stdout.splitlines()
+        if line.strip()
+    ]
+
+    if len(lines) >= 2:
+        return lines[1]
+
+    return None
+
+
+def is_macho_image(path):
+    """Return True only for loadable Mach-O images.
+
+    Mach-O relocatable object files (MH_OBJECT), such as GCC startup
+    objects like crttme.o, are valid Mach-O files but cannot safely be
+    rewritten with install_name_tool or treated as nested code.
+    """
+
+    if not path.is_file():
+        return False
+
+    result = subprocess.run(
+        [
+            "file",
+            str(path),
+        ],
+        text=True,
+        capture_output=True,
+    )
+
+    if result.returncode != 0:
+        return False
+
+    output = result.stdout.lower()
+
+    if "mach-o" not in output:
+        return False
+
+    # MH_OBJECT / relocatable object. These are compiler inputs/support
+    # files, not loadable Mach-O images.
+    if " object " in f" {output} ":
+        return False
+
+    return any(
+        marker in output
+        for marker in (
+            "executable",
+            "dynamically linked shared library",
+            "bundle",
+        )
+    )
+
+
+# Backwards-compatible internal name for callers that only need the old
+# predicate semantics. All Mach-O post-processing should use the stricter
+# image predicate above.
+is_macho_file = is_macho_image
+
+
+def install_name_change(binary, old, new):
+    if old == new:
+        return
+
+    run(
+        [
+            "install_name_tool",
+            "-change",
+            old,
+            new,
+            str(binary),
+        ]
+    )
+
+
+def install_name_id(binary, new):
+    current = install_name(binary)
+
+    if current == new:
+        return
+
+    run(
+        [
+            "install_name_tool",
+            "-id",
+            new,
+            str(binary),
+        ]
+    )
+
+
+def add_rpath(binary, rpath):
+    if rpath in otool_rpaths(binary):
+        return
+
+    result = run(
+        [
+            "install_name_tool",
+            "-add_rpath",
+            rpath,
+            str(binary),
+        ],
+        check=False,
+    )
+
+    if result.returncode != 0:
+        # The rpath may already exist but otool parsing can occasionally
+        # differ across macOS releases.
+        if rpath not in otool_rpaths(binary):
+            raise subprocess.CalledProcessError(
+                result.returncode,
+                result.args,
+            )
+
+
+# ============================================================================
+# Mach-O dependency resolution
+# ============================================================================
+
+def path_is_under(path, root):
+    try:
+        Path(path).resolve().relative_to(
+            Path(root).resolve()
+        )
+        return True
+    except ValueError:
+        return False
+
+
+def framework_root(path):
+    path = Path(path)
+
+    parts = path.parts
+
+    for index, part in enumerate(parts):
+        if part.endswith(".framework"):
+            return Path(
+                *parts[:index + 1]
+            )
+
+    return None
+
+
+def source_relative_rpath_candidates(
+    dependency,
+    source_binary,
+    search_roots,
+):
+    candidates = []
+
+    dependency = str(dependency)
+
+    if dependency.startswith("@loader_path/"):
+        relative = dependency[len("@loader_path/"):]
+
+        candidates.append(
+            source_binary.parent / relative
+        )
+
+    elif dependency.startswith("@executable_path/"):
+        relative = dependency[len("@executable_path/"):]
+
+        # For Mach-O files inside the app, walk back to Contents/MacOS.
+        contents = None
+
+        for parent in [
+            source_binary.parent,
+            *source_binary.parents,
+        ]:
+            if parent.name == "Contents":
+                contents = parent
+                break
+
+        if contents:
+            executable_dir = contents / "MacOS"
+
+            candidates.append(
+                executable_dir / relative
+            )
+
+        candidates.append(
+            source_binary.parent / relative
+        )
+
+    elif dependency.startswith("@rpath/"):
+        relative = dependency[len("@rpath/"):]
+
+        for rpath in otool_rpaths(source_binary):
+            if rpath.startswith("@loader_path/"):
+                root = (
+                    source_binary.parent
+                    / rpath[len("@loader_path/"):]
+                )
+
+                candidates.append(
+                    root / relative
+                )
+
+            elif rpath.startswith("@executable_path/"):
+                contents = None
+
+                for parent in [
+                    source_binary.parent,
+                    *source_binary.parents,
+                ]:
+                    if parent.name == "Contents":
+                        contents = parent
+                        break
+
+                if contents:
+                    root = (
+                        contents / "MacOS"
+                        / rpath[len("@executable_path/"):]
+                    )
+
+                    candidates.append(
+                        root / relative
+                    )
+
+            elif rpath.startswith("/"):
+                candidates.append(
+                    Path(rpath) / relative
+                )
+
+        for root in search_roots:
+            candidates.append(
+                Path(root) / relative
+            )
+
+    return [
+        candidate.resolve()
+        for candidate in candidates
+        if candidate.exists()
+    ]
+
+
+def resolve_macho_dependency(
+    dependency,
+    source_binary,
+    search_roots,
+):
+    dependency = str(dependency)
+
+    if dependency.startswith("/"):
+        path = Path(dependency)
+
+        if path.exists():
+            return path.resolve()
+
+    candidates = source_relative_rpath_candidates(
+        dependency,
+        source_binary,
+        search_roots,
+    )
+
+    if candidates:
+        return candidates[0]
+
+    return None
+
+
+def is_system_dependency(dependency):
+    dependency = str(dependency)
+
+    return (
+        dependency.startswith("/System/")
+        or
+        dependency.startswith("/usr/lib/")
+        or
+        dependency.startswith("@apple/")
+    )
+
+
+def is_homebrew_path(path, brew_root):
+    return path_is_under(
+        path,
+        brew_root,
+    )
+
+
+# ============================================================================
+# Bundle file copying
+# ============================================================================
+
+def copy_file_preserve(source, destination):
+    destination.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    if destination.exists():
+        return
+
+    shutil.copy2(
+        source,
+        destination,
+    )
+
+
+def copy_tree_deref(source, destination):
+    """
+    Copy a GCC support tree while dereferencing symlinks.
+
+    This is important because Homebrew's opt prefix is itself symlink-based.
+    The application must contain real files rather than symlinks pointing
+    back into /opt/homebrew/Cellar.
+    """
+
+    source = Path(source)
+    destination = Path(destination)
+
+    if not source.exists():
+        return
+
+    destination.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    for item in source.iterdir():
+        target = destination / item.name
+
+        if item.is_symlink():
+            resolved = item.resolve()
+
+            if resolved.is_dir():
+                shutil.copytree(
+                    resolved,
+                    target,
+                    symlinks=False,
+                    dirs_exist_ok=True,
+                )
+
+            elif resolved.is_file():
+                target.parent.mkdir(
+                    parents=True,
+                    exist_ok=True,
+                )
+
+                if not target.exists():
+                    shutil.copy2(
+                        resolved,
+                        target,
+                    )
+
+        elif item.is_dir():
+            shutil.copytree(
+                item,
+                target,
+                symlinks=False,
+                dirs_exist_ok=True,
+            )
+
+        else:
+            if not target.exists():
+                shutil.copy2(
+                    item,
+                    target,
+                )
+
+
+def bundle_regular_macho(
+    source,
+    frameworks,
+    source_to_destination,
+):
+    source = Path(source).resolve()
+
+    if source in source_to_destination:
+        return source_to_destination[source]
+
+    destination = frameworks / source.name
+
+    existing = destination.resolve() if destination.exists() else None
+
+    if existing and existing != source:
+        die(
+            "Two different dependencies have the same filename:\n"
+            f"  {existing}\n"
+            f"  {source}\n\n"
+            "The automatic bundler refuses to overwrite one with the other."
+        )
+
+    copy_file_preserve(
+        source,
+        destination,
+    )
+
+    source_to_destination[source] = destination
+
+    return destination
+
+
+def bundle_framework(
+    source,
+    frameworks,
+    source_to_destination,
+):
+    root = framework_root(source)
+
+    if root is None:
+        return bundle_regular_macho(
+            source,
+            frameworks,
+            source_to_destination,
+        )
+
+    root = root.resolve()
+
+    destination_root = frameworks / root.name
+
+    if root not in source_to_destination:
+        if not destination_root.exists():
+            shutil.copytree(
+                root,
+                destination_root,
+                symlinks=False,
+                dirs_exist_ok=True,
+            )
+
+        source_to_destination[root] = destination_root
+
+    try:
+        relative = source.relative_to(root)
+    except ValueError:
+        relative = Path(source.name)
+
+    destination = destination_root / relative
+
+    source_to_destination[source] = destination
+
+    return destination
+
+
+def bundle_dependency(
+    source,
+    frameworks,
+    source_to_destination,
+):
+    source = Path(source).resolve()
+
+    if not source.exists():
+        return None
+
+    root = framework_root(source)
+
+    if root:
+        return bundle_framework(
+            source,
+            frameworks,
+            source_to_destination,
+        )
+
+    return bundle_regular_macho(
+        source,
+        frameworks,
+        source_to_destination,
+    )
+
+
+# ============================================================================
+# Automatic Homebrew runtime closure
+# ============================================================================
+
+def discover_and_bundle_homebrew_dependencies(
+    app,
+    gcc_info,
+):
+    """
+    Walk the actual Mach-O dependency graph.
+
+    Every dependency that resolves inside the Homebrew prefix is copied into
+    Contents/Frameworks.
+
+    This includes dependencies of:
+        - Emacs
+        - libgccjit
+        - GCC support executables
+        - recursively discovered dylibs
+
+    System libraries are never copied.
+    """
+
+    brew_root = brew_prefix()
+
+    contents = app / "Contents"
+
+    frameworks = contents / "Frameworks"
+
+    if frameworks.exists():
+        shutil.rmtree(frameworks)
+
+    frameworks.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    source_to_destination = {}
+
+    pending = []
+
+    # Start with every Mach-O image already inside the app.
+    for path in contents.rglob("*"):
+        if path.is_file() and is_macho_image(path):
+            pending.append(
+                (path.resolve(), path.resolve())
+            )
+
+    # libgccjit is explicitly required by Emacs native compilation.
+    libgccjit = gcc_info["libgccjit"]
+
+    if libgccjit.exists():
+        destination = bundle_dependency(
+            libgccjit,
+            frameworks,
+            source_to_destination,
+        )
+
+        if destination:
+            pending.append(
+                (libgccjit.resolve(), destination)
+            )
+
+    bundled = set()
+
+    while pending:
+        source, current = pending.pop()
+
+        key = str(source)
+
+        if key in bundled:
+            continue
+
+        bundled.add(key)
+
+        if not source.exists():
+            continue
+
+        if not is_macho_image(source):
+            continue
+
+        for dependency in otool_dependencies(source):
+            if is_system_dependency(dependency):
+                continue
+
+            resolved = resolve_macho_dependency(
+                dependency,
+                source,
+                [
+                    frameworks,
+                    brew_root / "lib",
+                    gcc_info["runtime_dir"],
+                    gcc_info["libgccjit"].parent,
+                    *gcc_info["search_dirs"].get(
+                        "libraries",
+                        [],
+                    ),
+                ],
+            )
+
+            if resolved is None:
+                # @rpath dependencies can legitimately resolve only after
+                # another library has been copied. We will report remaining
+                # unresolved paths during the final validation.
+                continue
+
+            if not is_homebrew_path(
+                resolved,
+                brew_root,
+            ):
+                # Do not bundle non-Homebrew system/SDK libraries.
+                continue
+
+            destination = bundle_dependency(
+                resolved,
+                frameworks,
+                source_to_destination,
+            )
+
+            if destination:
+                pending.append(
+                    (
+                        resolved,
+                        destination,
+                    )
+                )
+
+    log()
+    log("Automatic Homebrew runtime discovery:")
+    log(f"  Homebrew root: {brew_root}")
+    log(f"  Bundled Mach-O objects: {len(source_to_destination)}")
+
+    return {
+        "frameworks": frameworks,
+        "source_to_destination": source_to_destination,
+        "brew_root": brew_root,
+    }
+
+
+# ============================================================================
+# GCC compiler support tree
+# ============================================================================
+
+def copy_gcc_compiler_support(
+    app,
+    gcc_info,
+):
+    """
+    Copy GCC's runtime/support files.
+
+    Dynamic libraries belong in Contents/Frameworks.
+
+    GCC compiler support data is placed under Contents/Resources/gcc.
+
+    Actual compiler executables are placed in Contents/Helpers, which is a
+    standard macOS helper-code location.
+    """
+
+    contents = app / "Contents"
+
+    resources = contents / "Resources"
+
+    helpers = contents / "Helpers"
+
+    gcc_root = resources / "gcc"
+
+    gcc_lib_root = gcc_root / "lib"
+
+    gcc_libexec_root = gcc_root / "libexec"
+
+    helpers.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    gcc_root.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    source_runtime = gcc_info["runtime_dir"]
+
+    # Preserve the hierarchy GCC actually reported rather than fabricating
+    # a target/version path. The normal Homebrew layout is still preserved
+    # when the reported path is under <prefix>/lib/gcc.
+    try:
+        gcc_prefix_lib = (
+            gcc_info["gcc_prefix"]
+            / "lib"
+            / "gcc"
+        )
+
+        relative_runtime = source_runtime.relative_to(
+            gcc_prefix_lib
+        )
+
+    except ValueError:
+        relative_runtime = Path(source_runtime.name)
+
+    destination_runtime = (
+        gcc_lib_root
+        / "gcc"
+        / relative_runtime
+    )
+
+    log()
+    log("Copying GCC runtime support tree:")
+    log(f"  {source_runtime}")
+    log(f"  -> {destination_runtime}")
+
+    copy_tree_deref(
+        source_runtime,
+        destination_runtime,
+    )
+
+    # GCC's libexec directory, discovered from cc1/cc1plus/collect2/lto1.
+    source_libexec = gcc_info["libexec_dir"]
+
+    try:
+        source_libexec_root = (
+            gcc_info["gcc_prefix"]
+            / "libexec"
+            / "gcc"
+        )
+        relative_libexec = source_libexec.relative_to(
+            source_libexec_root
+        )
+    except ValueError:
+        relative_libexec = Path(source_libexec.name)
+
+    destination_libexec = (
+        gcc_libexec_root
+        / "gcc"
+        / relative_libexec
+    )
+
+    if source_libexec.exists():
+        log()
+        log("Copying GCC libexec tree:")
+        log(f"  {source_libexec}")
+        log(f"  -> {destination_libexec}")
+
+        copy_tree_deref(
+            source_libexec,
+            destination_libexec,
+        )
+
+    # GCC headers.
+    source_include = (
+        gcc_info["gcc_prefix"]
+        / "include"
+    )
+
+    destination_include = (
+        gcc_root
+        / "include"
+    )
+
+    if source_include.exists():
+        log()
+        log("Copying GCC include tree:")
+        log(f"  {source_include}")
+        log(f"  -> {destination_include}")
+
+        copy_tree_deref(
+            source_include,
+            destination_include,
+        )
+
+    # libgccjit headers.
+    jit_include = (
+        gcc_info["libgccjit_prefix"]
+        / "include"
+    )
+
+    destination_jit_include = (
+        gcc_root
+        / "include"
+        / "libgccjit"
+    )
+
+    if jit_include.exists():
+        log()
+        log("Copying libgccjit headers:")
+        log(f"  {jit_include}")
+        log(f"  -> {destination_jit_include}")
+
+        copy_tree_deref(
+            jit_include,
+            destination_jit_include,
+        )
+
+    # Copy the actual GCC driver and helper executables.
+    #
+    # GCC/libgccjit looks for a target-specific versioned driver. Homebrew
+    # keeps the normal GNU compiler executable versioned.
+    source_bin = gcc_info["gcc"].parent
+
+    driver_destination = (
+        helpers / gcc_info["gcc"].name
+    )
+
+    copy_file_preserve(
+        gcc_info["gcc"],
+        driver_destination,
+    )
+
+    compiler_programs = [
+        gcc_info.get("cc1"),
+        gcc_info.get("cc1plus"),
+        gcc_info.get("collect2"),
+        gcc_info.get("lto1"),
+    ]
+
+    copied_programs = []
+
+    for program in compiler_programs:
+        if not program:
+            continue
+
+        destination = helpers / program.name
+
+        if destination.exists():
+            continue
+
+        copy_file_preserve(
+            program,
+            destination,
+        )
+
+        copied_programs.append(
+            destination
+        )
+
+    # Do not synthesize a target driver name from -dumpversion. Preserve the
+    # actual Homebrew driver basename, and derive any target-prefixed alias
+    # from that basename. This survives GCC version/name changes.
+    actual_driver_name = gcc_info["gcc"].name
+    target_driver_name = (
+        f"{gcc_info['target']}-{actual_driver_name}"
+    )
+
+    target_driver = helpers / target_driver_name
+
+    if not target_driver.exists():
+        shutil.copy2(
+            driver_destination,
+            target_driver,
+        )
+
+    # Create tiny wrappers that apply GCC_EXEC_PREFIX and COMPILER_PATH only
+    # to the GCC process. Keep the app-facing command stable as `gcc`.
+    compiler_wrapper_dir = (
+        resources
+        / "native-compiler-bin"
+    )
+
+    compiler_wrapper_dir.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    wrapper_content = f"""#!/bin/sh
+
+APP_ROOT=\"$(CDPATH= cd -- \"$(dirname -- \"$0\")/../..\" && pwd)\"
+
+export GCC_EXEC_PREFIX=\"$APP_ROOT/Resources/gcc/lib/gcc/\"
+export COMPILER_PATH=\"$APP_ROOT/Contents/Helpers\"
+
+exec \"$APP_ROOT/Contents/Helpers/{actual_driver_name}\" \"$@\"
+"""
+
+    generic_wrapper = compiler_wrapper_dir / "gcc"
+    generic_wrapper.write_text(
+        wrapper_content,
+        encoding="utf-8",
+    )
+    generic_wrapper.chmod(0o755)
+
+    # Also expose the exact discovered driver basename, e.g. gcc-16, without
+    # hard-coding that version in the build script.
+    wrapper = compiler_wrapper_dir / actual_driver_name
+    if wrapper != generic_wrapper:
+        wrapper.write_text(
+            wrapper_content,
+            encoding="utf-8",
+        )
+        wrapper.chmod(0o755)
+
+    # Some libgccjit/GCC integrations probe a target-prefixed driver. Provide
+    # the alias using the actual driver name rather than reconstructing its
+    # version suffix.
+    target_wrapper = compiler_wrapper_dir / target_driver_name
+    target_wrapper.write_text(
+        wrapper_content,
+        encoding="utf-8",
+    )
+    target_wrapper.chmod(0o755)
+
+    log()
+    log("Bundled GCC driver:")
+    log(f"  {driver_destination}")
+
+    log("Bundled GCC target driver:")
+    log(f"  {target_driver}")
+
+    log("GCC compiler wrapper:")
+    log(f"  {generic_wrapper}")
+    log("GCC versioned compiler wrapper:")
+    log(f"  {wrapper}")
+    log("GCC target-prefixed compiler wrapper:")
+    log(f"  {target_wrapper}")
+
+    return {
+        "gcc_root": gcc_root,
+        "helpers": helpers,
+        "wrapper_dir": compiler_wrapper_dir,
+        "wrapper": wrapper,
+        "target_driver": target_driver,
+        "target_wrapper": target_wrapper,
+        "generic_wrapper": generic_wrapper,
+        "actual_driver_name": actual_driver_name,
+        "runtime_dir": destination_runtime,
+        "compiler_path": helpers,
+    }
+
+
+# ============================================================================
+# Rewrite Mach-O paths
+# ============================================================================
+
+def app_framework_rpath(binary, frameworks):
+    binary = Path(binary)
+    frameworks = Path(frameworks)
+
+    try:
+        relative = os.path.relpath(
+            frameworks,
+            binary.parent,
+        )
+    except ValueError:
+        return None
+
+    return "@loader_path/" + relative
+
+
+def destination_for_dependency(
+    dependency,
+    source_binary,
+    bundle_state,
+):
+    frameworks = bundle_state["frameworks"]
+
+    source_to_destination = (
+        bundle_state["source_to_destination"]
+    )
+
+    resolved = resolve_macho_dependency(
+        dependency,
+        source_binary,
+        [
+            frameworks,
+        ],
+    )
+
+    if resolved is None:
+        return None
+
+    resolved = resolved.resolve()
+
+    if resolved in source_to_destination:
+        return source_to_destination[resolved]
+
+    # Framework roots can have been mapped even when the exact file was not.
+    root = framework_root(resolved)
+
+    if root and root in source_to_destination:
+        try:
+            relative = resolved.relative_to(root)
+        except ValueError:
+            relative = Path(resolved.name)
+
+        return (
+            source_to_destination[root]
+            / relative
+        )
+
+    return None
+
+
+def rewrite_bundled_macho(
+    app,
+    bundle_state,
+):
+    frameworks = bundle_state["frameworks"]
+
+    source_to_destination = (
+        bundle_state["source_to_destination"]
+    )
+
+    binaries = []
+
+    for path in app.rglob("*"):
+        if path.is_file() and is_macho_image(path):
+            binaries.append(path.resolve())
+
+    # Add all copied dependency objects.
+    for destination in source_to_destination.values():
+        destination = Path(destination)
+
+        if destination.is_file() and is_macho_image(destination):
+            binaries.append(destination.resolve())
+
+    # De-duplicate.
+    unique = []
+
+    seen = set()
+
+    for binary in binaries:
+        if binary in seen:
+            continue
+
+        seen.add(binary)
+        unique.append(binary)
+
+    log()
+    log("Rewriting Mach-O dependency paths...")
+
+    # First add rpaths.
+    for binary in unique:
+        rpath = app_framework_rpath(
+            binary,
+            frameworks,
+        )
+
+        if rpath:
+            add_rpath(
+                binary,
+                rpath,
+            )
+
+    # Rewrite dependencies.
+    #
+    # We use the original dependency string and the original source path when
+    # resolving the dependency. For bundled copies, the destination is then
+    # rewritten to @rpath/<framework-or-dylib-path>.
+    for binary in unique:
+        dependencies = otool_dependencies(binary)
+
+        for dependency in dependencies:
+            if is_system_dependency(dependency):
+                continue
+
+            destination = destination_for_dependency(
+                dependency,
+                binary,
+                bundle_state,
+            )
+
+            if destination is None:
+                continue
+
+            try:
+                relative = destination.relative_to(
+                    frameworks
+                )
+            except ValueError:
+                continue
+
+            new_name = (
+                "@rpath/"
+                + str(relative).replace(os.sep, "/")
+            )
+
+            if dependency == new_name:
+                continue
+
+            install_name_change(
+                binary,
+                dependency,
+                new_name,
+            )
+
+    # Rewrite install IDs for bundled dylibs/framework binaries.
+    for destination in source_to_destination.values():
+        destination = Path(destination)
+
+        if not destination.is_file():
+            continue
+
+        if not is_macho_image(destination):
+            continue
+
+        current_id = install_name(
+            destination
+        )
+
+        if not current_id:
+            continue
+
+        try:
+            relative = destination.relative_to(
+                frameworks
+            )
+        except ValueError:
+            continue
+
+        desired = (
+            "@rpath/"
+            + str(relative).replace(os.sep, "/")
+        )
+
+        if current_id != desired:
+            install_name_id(
+                destination,
+                desired,
+            )
+
+    log("Mach-O rewriting complete.")
+
+
+# ============================================================================
+# Remaining dependency verification
+# ============================================================================
+
+def verify_no_external_homebrew_dependencies(
+    app,
+    brew_root,
+):
+    """
+    Verify that no Mach-O object inside the application still references an
+    absolute Homebrew path.
+
+    This does not reject system libraries.
+    """
+
+    remaining = []
+
+    for path in app.rglob("*"):
+        if not path.is_file():
+            continue
+
+        if not is_macho_image(path):
+            continue
+
+        for dependency in otool_dependencies(path):
+            if dependency.startswith(str(brew_root) + "/"):
+                remaining.append(
+                    (
+                        path,
+                        dependency,
+                    )
+                )
+
+    if remaining:
+        log()
+        log(
+            "WARNING: absolute Homebrew dependencies remain:"
+        )
+
+        for binary, dependency in remaining:
+            log(f"  {binary}")
+            log(f"      {dependency}")
+
+        return False
+
+    log()
+    log(
+        "No absolute Homebrew dependencies remain in the application."
+    )
+
+    return True
+
+
+# ============================================================================
+# Native compilation startup configuration
+# ============================================================================
+
+def elisp_string(value):
+    """
+    Return a safely quoted Emacs Lisp string.
+    """
+
+    return '"' + (
+        str(value)
+        .replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\n", "\\n")
+    ) + '"'
+
+
+def write_native_comp_site_file(
+    app,
+    gcc_bundle,
+):
+    """
+    Generate site-start.el.
+
+    EMACSLOADPATH is used to make this file visible to Emacs before the user
+    init file. An empty trailing element preserves the normal Emacs load path.
+
+    native-comp-driver-options supplies linker paths directly to libgccjit,
+    which avoids relying solely on GUI-specific LSEnvironment.
+    """
+
+    contents = app / "Contents"
+
+    resources = contents / "Resources"
+
+    site_lisp = resources / "site-lisp"
+
+    site_lisp.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    site_file = site_lisp / "site-start.el"
+
+    frameworks = contents / "Frameworks"
+
+    runtime_dir = gcc_bundle["runtime_dir"]
+
+    wrapper_dir = gcc_bundle["wrapper_dir"]
+
+    compiler_path = gcc_bundle["compiler_path"]
+
+    # The important native-comp linker paths.
+    driver_options = [
+        f"-L{frameworks}",
+        f"-L{runtime_dir}",
+        f"-L{runtime_dir.parent}",
+        f"-L{gcc_bundle['gcc_root'] / 'lib'}",
+    ]
+
+    # Remove duplicates while retaining order.
+    unique_options = []
+
+    for option in driver_options:
+        if option not in unique_options:
+            unique_options.append(option)
+
+    option_forms = " ".join(
+        elisp_string(option)
+        for option in unique_options
+    )
+
+    site_content = f""";;; site-start.el --- bundled native-comp configuration
+;;;
+;;; This file was generated by build-emacs.py.
+;;;
+;;; It belongs to this Emacs.app and must not depend on Homebrew after
+;;; installation.
+
+(let* ((bundle-root
+        (expand-file-name
+         "../.."
+         (file-name-directory
+          (or load-file-name buffer-file-name))))
+       (contents
+        (expand-file-name "Contents" bundle-root))
+       (resources
+        (expand-file-name "Resources" contents))
+       (frameworks
+        (expand-file-name "Frameworks" contents))
+       (compiler-bin
+        (expand-file-name "native-compiler-bin" resources))
+       (gcc-root
+        (expand-file-name "gcc" resources))
+       (compiler-path
+        {elisp_string(str(compiler_path))})
+       (runtime-dir
+        {elisp_string(str(runtime_dir))}))
+
+  ;; The libgccjit driver needs to find the bundled target-specific GCC
+  ;; executable.
+  ;;
+  ;; Put only the bundled compiler wrapper directory at the front. We do not
+  ;; replace the normal PATH.
+  (when (file-directory-p compiler-bin)
+    (setenv
+     "PATH"
+     (concat compiler-bin
+             path-separator
+             (or (getenv "PATH") ""))))
+
+  ;; GCC uses COMPILER_PATH for its helper programs.
+  ;;
+  ;; This is deliberately set in the Emacs process only. The compiler wrapper
+  ;; also sets it for the actual GCC process.
+  (when (file-directory-p compiler-path)
+    (setenv
+     "COMPILER_PATH"
+     (concat compiler-path
+             path-separator
+             (or (getenv "COMPILER_PATH") ""))))
+
+  ;; Do not set GCC_EXEC_PREFIX globally. The compiler wrapper applies it only
+  ;; when GCC itself is invoked.
+  ;;
+  ;; This prevents GCC-specific settings from leaking into ordinary Emacs
+  ;; subprocesses.
+
+  (when (boundp 'native-comp-driver-options)
+    (setq native-comp-driver-options
+          (append
+           '({option_forms})
+           native-comp-driver-options)))
+
+  ;; Keep the bundled site directory discoverable even when EMACSLOADPATH was
+  ;; already set by the user.
+  (add-to-list
+   'load-path
+   (expand-file-name
+    "site-lisp"
+    resources)))
+
+;;; site-start.el ends here
+"""
+
+    site_file.write_text(
+        site_content,
+        encoding="utf-8",
+    )
+
+    log()
+    log("Generated native-comp site-start.el:")
+    log(f"    {site_file}")
+
+    return site_file
+
+
+# ============================================================================
+# Info.plist
+# ============================================================================
+
+def set_plist_environment(
+    app,
+    gcc_bundle,
+):
+    plist_path = (
+        app
+        / "Contents"
+        / "Info.plist"
+    )
+
+    if not plist_path.exists():
+        die(
+            f"Info.plist was not found:\n"
+            f"    {plist_path}"
+        )
+
+    with plist_path.open("rb") as f:
+        plist = plistlib.load(f)
+
+    contents = app / "Contents"
+
+    resources = contents / "Resources"
+
+    frameworks = contents / "Frameworks"
+
+    runtime_dir = gcc_bundle["runtime_dir"]
+
+    compiler_bin = gcc_bundle["wrapper_dir"]
+
+    site_lisp = resources / "site-lisp"
+
+    # Emacs Plus's current approach keeps LIBRARY_PATH in LSEnvironment for
+    # GUI-launched Emacs, while native-comp-driver-options handles terminal
+    # launches.
+    #
+    # Include both the application Frameworks directory and the exact GCC
+    # runtime directory containing libemutls_w.a.
+    library_paths = [
+        frameworks,
+        runtime_dir,
+        runtime_dir.parent,
+    ]
+
+    unique = []
+
+    for path in library_paths:
+        text = str(path)
+
+        if text not in unique:
+            unique.append(text)
+
+    env = plist.get(
+        "LSEnvironment",
+        {},
+    )
+
+    env["LIBRARY_PATH"] = os.pathsep.join(
+        unique
+    )
+
+    # Make the bundled target-specific GCC discoverable by libgccjit for
+    # GUI-launched Emacs.
+    #
+    # The wrapper directory contains only gcc wrappers, not a generic clang
+    # replacement, so ordinary /usr/bin/gcc remains available later in PATH.
+    system_path = "/usr/bin:/bin:/usr/sbin:/sbin"
+
+    env["PATH"] = (
+        str(compiler_bin)
+        + os.pathsep
+        + system_path
+    )
+
+    # Preserve the normal Emacs Lisp load path.
+    #
+    # A trailing ':' means "also use Emacs's normal default load path".
+    env["EMACSLOADPATH"] = (
+        str(site_lisp)
+        + ":"
+    )
+
+    plist["LSEnvironment"] = env
+
+    with plist_path.open("wb") as f:
+        plistlib.dump(
+            plist,
+            f,
+            sort_keys=False,
+        )
+
+    log()
+    log("Injected macOS LSEnvironment:")
+    log(f"  LIBRARY_PATH   = {env['LIBRARY_PATH']}")
+    log(f"  PATH           = {env['PATH']}")
+    log(f"  EMACSLOADPATH  = {env['EMACSLOADPATH']}")
+
+
+# ============================================================================
+# macOS icon
+# ============================================================================
+
+def create_icns(icon_source):
+    require_command("sips")
+    require_command("iconutil")
+
+    if not icon_source.exists():
+        log(
+            f"\nWarning: custom icon not found:\n"
+            f"    {icon_source}\n"
+            "Skipping icon injection."
+        )
+        return None
+
+    iconset = Path(
+        tempfile.mkdtemp(
+            prefix="emacs-iconset-"
+        )
+    )
+
+    sizes = {
+        "icon_16x16.png": 16,
+        "icon_16x16@2x.png": 32,
+        "icon_32x32.png": 32,
+        "icon_32x32@2x.png": 64,
+        "icon_128x128.png": 128,
+        "icon_128x128@2x.png": 256,
+        "icon_256x256.png": 256,
+        "icon_256x256@2x.png": 512,
+        "icon_512x512.png": 512,
+        "icon_512x512@2x.png": 1024,
+    }
+
+    log("\nGenerating Emacs.icns...")
+
+    try:
+        for filename, size in sizes.items():
+            output = iconset / filename
+
+            run(
+                [
+                    "sips",
+                    "-s",
+                    "format",
+                    "png",
+                    "-z",
+                    str(size),
+                    str(size),
+                    str(icon_source),
+                    "--out",
+                    str(output),
+                ]
+            )
+
+        icns = Path(
+            tempfile.gettempdir()
+        ) / "Emacs.icns"
+
+        if icns.exists():
+            icns.unlink()
+
+        run(
+            [
+                "iconutil",
+                "-c",
+                "icns",
+                str(iconset),
+                "-o",
+                str(icns),
+            ]
+        )
+
+        return icns
+
+    finally:
+        shutil.rmtree(
+            iconset,
+            ignore_errors=True,
+        )
+
+
+def install_macos_icon(app):
+    icns = create_icns(
+        ICON_SRC
+    )
+
+    if not icns:
+        return
+
+    target = (
+        app
+        / "Contents"
+        / "Resources"
+        / "Emacs.icns"
+    )
+
+    log()
+    log("Installing custom icon:")
+    log(f"    {target}")
+
+    shutil.copy2(
+        icns,
+        target,
+    )
+
+    icns.unlink(
+        missing_ok=True
+    )
+
+
+# ============================================================================
+# Signing
+# ============================================================================
+
+def remove_existing_signatures(app):
+    """
+    Remove signatures before install_name_tool and other post-processing.
+
+    codesign --remove-signature does not require sudo.
+    """
+
+    log()
+    log("Removing any existing application signature...")
+
+    run(
+        [
+            "codesign",
+            "--remove-signature",
+            str(app),
+        ],
+        check=False,
+    )
+
+    # Remove nested signatures as well.
+    for path in app.rglob("*"):
+        if not path.is_file():
+            continue
+
+        if not is_macho_image(path):
+            continue
+
+        run(
+            [
+                "codesign",
+                "--remove-signature",
+                str(path),
+            ],
+            check=False,
+        )
+
+
+def sign_macos_app(
+    app,
+    identity,
+):
+    require_command("codesign")
+
+    remove_existing_signatures(
+        app
+    )
+
+    contents = app / "Contents"
+
+    nested = []
+
+    # Sign actual Mach-O code in standard nested-code locations.
+    for root_name in (
+        "Frameworks",
+        "PlugIns",
+        "XPCServices",
+        "Helpers",
+        "MacOS",
+    ):
+        root = contents / root_name
+
+        if not root.exists():
+            continue
+
+        for path in root.rglob("*"):
+            if path.is_file() and is_macho_image(path):
+                nested.append(path.resolve())
+
+    # Deepest paths first.
+    nested.sort(
+        key=lambda p: len(p.parts),
+        reverse=True,
+    )
+
+    log()
+    log("========================================")
+    log(" Signing macOS Emacs")
+    log("========================================")
+    log(f"Identity: {identity}")
+
+    for binary in nested:
+        args = [
+            "codesign",
+            "--force",
+            "--sign",
+            identity,
+        ]
+
+        if identity != "-":
+            args.extend([
+                "--timestamp",
+            ])
+
+        # Hardened runtime belongs on the main distributed executable/app,
+        # not on ordinary libraries.
+        run(
+            args + [str(binary)]
+        )
+
+    # Main Emacs executable.
+    emacs_binary = (
+        contents
+        / "MacOS"
+        / "Emacs"
+    )
+
+    if emacs_binary.exists():
+        args = [
+            "codesign",
+            "--force",
+            "--sign",
+            identity,
+        ]
+
+        if identity != "-":
+            args.extend([
+                "--timestamp",
+                "--options",
+                "runtime",
+            ])
+
+        run(
+            args + [str(emacs_binary)]
+        )
+
+    # Finally sign the application itself.
+    args = [
+        "codesign",
+        "--force",
+        "--sign",
+        identity,
+    ]
+
+    if identity != "-":
+        args.extend([
+            "--timestamp",
+            "--options",
+            "runtime",
         ])
 
-        run([
-            "sudo",
-            "cp",
-            "-R",
-            app,
-            APP.parent,
-        ])
+    run(
+        args + [str(app)]
+    )
 
-        # Clean up local build artifact 'nextstep/Emacs.app' after copying
-        print(f"\nCleaning up local build artifact: {app}")
-        shutil.rmtree(app, ignore_errors=True)
+    verify_codesign(
+        app
+    )
 
-        # Patch Info.plist to inject runtime environment variables for libgccjit & native-comp
-        brew_prefix = get_brew_prefix()
-        gcc_lib_base = Path(brew_prefix) / "opt" / "gcc" / "lib" / "gcc" / "current"
 
-        libgccjit_paths = [str(gcc_lib_base), f"{brew_prefix}/lib"]
-        if gcc_lib_base.exists():
-            subdirs = list(gcc_lib_base.glob("gcc/*/*"))
-            libgccjit_paths.extend([str(d) for d in subdirs])
+def verify_codesign(app):
+    require_command("codesign")
 
-        sdk_path = "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib"
-        if Path(sdk_path).exists():
-            libgccjit_paths.append(sdk_path)
+    log()
+    log("Verifying code signature:")
 
-        library_path_env = ":".join(libgccjit_paths)
-        path_env = f"{brew_prefix}/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+    run(
+        [
+            "codesign",
+            "--verify",
+            "--deep",
+            "--strict",
+            "--verbose=2",
+            str(app),
+        ]
+    )
 
-        print("\nPatching Emacs.app Info.plist with LSEnvironment variables...")
-        run([
-            "sudo", "defaults", "write", f"{APP}/Contents/Info.plist",
-            "LSEnvironment", "-dict",
-            "LIBRARY_PATH", library_path_env,
-            "PATH", path_env
-        ])
-        run([
-            "sudo", "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister",
-            "-f", str(APP)
-        ])
+    run(
+        [
+            "codesign",
+            "--display",
+            "--verbose=2",
+            str(app),
+        ],
+        check=False,
+    )
 
-        # Convenient CLI wrappers
-        run([
+    log("Code signature: OK")
+
+
+# ============================================================================
+# macOS CLI wrappers
+# ============================================================================
+
+def install_wrapper(path, content):
+    path = Path(path)
+
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        delete=False,
+    ) as tmp:
+        tmp.write(content)
+        tmp_path = Path(tmp.name)
+
+    try:
+        run(
+            [
+                "sudo",
+                "cp",
+                str(tmp_path),
+                str(path),
+            ]
+        )
+
+        run(
+            [
+                "sudo",
+                "chmod",
+                "755",
+                str(path),
+            ]
+        )
+
+    finally:
+        tmp_path.unlink(
+            missing_ok=True
+        )
+
+
+def install_macos_wrappers():
+    require_command("sudo")
+
+    bin_dir = Path(
+        "/usr/local/bin"
+    )
+
+    run(
+        [
             "sudo",
             "mkdir",
             "-p",
-            "/usr/local/bin",
-        ])
+            str(bin_dir),
+        ]
+    )
 
-        wrapper_path = Path("/usr/local/bin/emacs")
-        wrapper_content = f"""#!/bin/sh
-exec {APP}/Contents/MacOS/Emacs "$@"
-"""
-        print(f"\nCreating CLI wrapper -> {wrapper_path}")
-        run(["sudo", "sh", "-c", f"cat << 'EOF' > {wrapper_path}\n{wrapper_content}\nEOF"])
-        run(["sudo", "chmod", "+x", wrapper_path])
+    app = MACOS_APP
 
-        # Do the same for emacsclient if it exists
-        client_target = APP / "Contents" / "MacOS" / "bin" / "emacsclient"
-        client_wrapper = Path("/usr/local/bin/emacsclient")
-        if client_target.exists():
-            client_content = f"""#!/bin/sh
-exec {client_target} "$@"
+    frameworks = (
+        app
+        / "Contents"
+        / "Frameworks"
+    )
+
+    compiler_bin = (
+        app
+        / "Contents"
+        / "Resources"
+        / "native-compiler-bin"
+    )
+
+    emacs_binary = (
+        app
+        / "Contents"
+        / "MacOS"
+        / "Emacs"
+    )
+
+    # We intentionally do NOT put GCC into the normal system PATH here.
+    # Native compilation inside Emacs gets the bundled compiler through
+    # LSEnvironment/site-start.
+    emacs_script = f"""#!/bin/sh
+
+APP="{app}"
+FRAMEWORKS="$APP/Contents/Frameworks"
+
+export LIBRARY_PATH="$FRAMEWORKS"
+export EMACSLOADPATH="$APP/Contents/Resources/site-lisp:"
+
+unset GCC_EXEC_PREFIX
+unset COMPILER_PATH
+
+exec "$APP/Contents/MacOS/Emacs" "$@"
 """
-            run(["sudo", "sh", "-c", f"cat << 'EOF' > {client_wrapper}\n{client_content}\nEOF"])
-            run(["sudo", "chmod", "+x", client_wrapper])
-    else:
+
+    install_wrapper(
+        bin_dir / "emacs",
+        emacs_script,
+    )
+
+    emacsclient_target = (
+        app
+        / "Contents"
+        / "MacOS"
+        / "bin"
+        / "emacsclient"
+    )
+
+    if emacsclient_target.exists():
+        emacsclient_script = f"""#!/bin/sh
+
+APP="{app}"
+FRAMEWORKS="$APP/Contents/Frameworks"
+
+export LIBRARY_PATH="$FRAMEWORKS"
+export EMACSLOADPATH="$APP/Contents/Resources/site-lisp:"
+
+unset GCC_EXEC_PREFIX
+unset COMPILER_PATH
+
+exec "$APP/Contents/MacOS/bin/emacsclient" "$@"
+"""
+
+        install_wrapper(
+            bin_dir / "emacsclient",
+            emacsclient_script,
+        )
+
+    log()
+    log("Installed macOS CLI wrappers.")
+
+
+# ============================================================================
+# Launch Services
+# ============================================================================
+
+def refresh_launch_services(app):
+    lsregister = Path(
+        "/System/Library/Frameworks/"
+        "CoreServices.framework/"
+        "Frameworks/"
+        "LaunchServices.framework/"
+        "Support/"
+        "lsregister"
+    )
+
+    log()
+    log("Refreshing Launch Services...")
+
+    if lsregister.exists():
         run(
-            ["sudo", make_cmd, "install"],
-            cwd=SRC,
+            [
+                str(lsregister),
+                "-f",
+                str(app),
+            ],
+            check=False,
+        )
+
+    run(
+        [
+            "killall",
+            "Dock",
+        ],
+        check=False,
+    )
+
+    run(
+        [
+            "killall",
+            "Finder",
+        ],
+        check=False,
+    )
+
+
+# ============================================================================
+# macOS installation
+# ============================================================================
+
+def install_macos(
+    build_dir,
+    sign_identity,
+):
+    make = make_command("macos")
+
+    log()
+    log("========================================")
+    log(" Installing macOS Emacs")
+    log("========================================")
+
+    run(
+        [
+            make,
+            "install",
+        ],
+        cwd=build_dir,
+    )
+
+    built_app = (
+        build_dir
+        / "nextstep"
+        / "Emacs.app"
+    )
+
+    if not built_app.exists():
+        die(
+            "Emacs.app was not produced by the build:\n"
+            f"    {built_app}"
+        )
+
+    # Everything below happens before final signing.
+    #
+    # This ordering is intentional: install_name_tool and Info.plist/icon
+    # changes invalidate signatures.
+    remove_existing_signatures(
+        built_app
+    )
+
+    gcc_info = gcc_runtime_info()
+
+    bundle_state = (
+        discover_and_bundle_homebrew_dependencies(
+            built_app,
+            gcc_info,
+        )
+    )
+
+    gcc_bundle = (
+        copy_gcc_compiler_support(
+            built_app,
+            gcc_info,
+        )
+    )
+
+    rewrite_bundled_macho(
+        built_app,
+        bundle_state,
+    )
+
+    write_native_comp_site_file(
+        built_app,
+        gcc_bundle,
+    )
+
+    set_plist_environment(
+        built_app,
+        gcc_bundle,
+    )
+
+    install_macos_icon(
+        built_app
+    )
+
+    verify_no_external_homebrew_dependencies(
+        built_app,
+        bundle_state["brew_root"],
+    )
+
+    if sign_identity is not None:
+        sign_macos_app(
+            built_app,
+            sign_identity,
+        )
+    else:
+        log()
+        log("Code signing disabled by --no-sign.")
+
+    # Verify the app before copying it.
+    if sign_identity is not None:
+        verify_codesign(
+            built_app
+        )
+
+    log()
+    log("Installing application:")
+    log(f"    {built_app}")
+    log(f" -> {MACOS_APP}")
+
+    run(
+        [
+            "sudo",
+            "rm",
+            "-rf",
+            str(MACOS_APP),
+        ]
+    )
+
+    run(
+        [
+            "sudo",
+            "cp",
+            "-R",
+            str(built_app),
+            str(MACOS_APP.parent),
+        ]
+    )
+
+    # Verify the installed copy before declaring success.
+    if sign_identity is not None:
+        verify_codesign(
+            MACOS_APP
+        )
+
+    install_macos_wrappers()
+
+    refresh_launch_services(
+        MACOS_APP
+    )
+
+    log()
+    log("Bundled GCC:")
+    log(f"    {gcc_info['version']}")
+
+    log("Bundled GCC target:")
+    log(f"    {gcc_info['target']}")
+
+    if built_app.exists():
+        log()
+        log("Removing generated app from build tree:")
+        log(f"    {built_app}")
+
+        shutil.rmtree(
+            built_app,
+            ignore_errors=True,
         )
 
 
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
+# ============================================================================
+# Linux installation
+# ============================================================================
 
-def main():
-    parser = argparse.ArgumentParser(description="Simple GNU Emacs builder and uninstaller")
+def install_arch(build_dir):
+    make = make_command("arch")
+
+    log()
+    log("========================================")
+    log(" Installing Arch Linux Emacs")
+    log("========================================")
+
+    run(
+        [
+            "sudo",
+            make,
+            "install",
+        ],
+        cwd=build_dir,
+    )
+
+    install_linux_icon()
+
+
+def install_linux_icon():
+    if not ICON_SRC.exists():
+        log(
+            f"\nWarning: custom icon not found:\n"
+            f"    {ICON_SRC}\n"
+            "Skipping Linux icon installation."
+        )
+        return
+
+    log("\nInstalling Linux application icons...")
+
+    resolutions = [
+        16,
+        24,
+        32,
+        48,
+        64,
+        128,
+        256,
+        512,
+    ]
+
+    convert = shutil.which("convert")
+
+    for resolution in resolutions:
+        icon_dir = (
+            Path.home()
+            / ".local"
+            / "share"
+            / "icons"
+            / "hicolor"
+            / f"{resolution}x{resolution}"
+            / "apps"
+        )
+
+        icon_dir.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        target = icon_dir / "emacs.png"
+
+        if convert:
+            run(
+                [
+                    convert,
+                    str(ICON_SRC),
+                    "-resize",
+                    f"{resolution}x{resolution}",
+                    str(target),
+                ]
+            )
+        else:
+            shutil.copy2(
+                ICON_SRC,
+                target,
+            )
+
+    applications = (
+        Path.home()
+        / ".local"
+        / "share"
+        / "applications"
+    )
+
+    applications.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    desktop_file = (
+        applications
+        / "gnu-emacs-source.desktop"
+    )
+
+    desktop_content = f"""[Desktop Entry]
+Name=GNU Emacs (Source Build)
+GenericName=Text Editor
+Comment=Extensible, customizable text editor
+Exec={PREFIX}/bin/emacs %F
+Icon=emacs
+Type=Application
+Terminal=false
+Categories=Utility;Development;TextEditor;
+StartupNotify=true
+MimeType=text/plain;text/x-c;text/x-c++hdr;text/x-c++src;text/x-chdr;text/x-csrc;text/x-java;text/x-makefile;text/x-moc;text/x-pascal;text/x-tcl;text/x-tex;application/x-shellscript;text/x-python;
+"""
+
+    desktop_file.write_text(
+        desktop_content,
+        encoding="utf-8",
+    )
+
+    if command_exists("update-desktop-database"):
+        run(
+            [
+                "update-desktop-database",
+                str(applications),
+            ],
+            check=False,
+        )
+
+    if command_exists("gtk-update-icon-cache"):
+        hicolor = (
+            Path.home()
+            / ".local"
+            / "share"
+            / "icons"
+            / "hicolor"
+        )
+
+        run(
+            [
+                "gtk-update-icon-cache",
+                "-f",
+                "-t",
+                str(hicolor),
+            ],
+            check=False,
+        )
+
+
+def install(
+    build_dir,
+    os_type,
+    sign_identity,
+):
+    if os_type == "macos":
+        install_macos(
+            build_dir,
+            sign_identity,
+        )
+    else:
+        install_arch(
+            build_dir
+        )
+
+
+# ============================================================================
+# Native compilation test
+# ============================================================================
+
+def native_comp_test_expression():
+    return (
+        "(progn "
+        "(require 'comp) "
+        "(let ((tmp (make-temp-file "
+        "\"emacs-native-test\" nil \".el\"))) "
+        "(unwind-protect "
+        "(progn "
+        "(with-temp-file tmp "
+        "(insert "
+        "\"(defun emacs-native-test-function (x) "
+        "(+ x 42))\\n\")) "
+        "(let ((result (native-compile tmp))) "
+        "(if (and result (file-exists-p result)) "
+        "(progn "
+        "(princ (format \"native-comp-output=%s\\n\" result)) "
+        "(princ \"native-comp-test=ok\\n\")) "
+        "(error \"native-compile did not produce an ELN file\")))) "
+        "(ignore-errors "
+        "(delete-file tmp)))))"
+    )
+
+
+def macos_verification_environment():
+    """
+    Deliberately minimal environment.
+
+    The application itself supplies:
+        - LSEnvironment
+        - site-start.el
+        - native-comp-driver-options
+        - bundled compiler wrapper
+
+    This test therefore catches cold-cache problems that a warm native-comp
+    cache can otherwise hide.
+    """
+
+    env = {
+        "HOME": str(Path.home()),
+        "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
+        "EMACSLOADPATH": (
+            str(
+                MACOS_APP
+                / "Contents"
+                / "Resources"
+                / "site-lisp"
+            )
+            + ":"
+        ),
+        "LIBRARY_PATH": str(
+            MACOS_APP
+            / "Contents"
+            / "Frameworks"
+        ),
+    }
+
+    env.pop(
+        "GCC_EXEC_PREFIX",
+        None,
+    )
+
+    env.pop(
+        "COMPILER_PATH",
+        None,
+    )
+
+    return env
+
+
+def verify_bundled_gcc():
+    """
+    Verify the exact GCC driver bundled into the application.
+
+    This deliberately runs with a minimal environment so a successful test
+    cannot be explained by a Homebrew GCC found through PATH/COMPILER_PATH.
+    """
+
+    compiler_bin = (
+        MACOS_APP
+        / "Contents"
+        / "Resources"
+        / "native-compiler-bin"
+        / "gcc"
+    )
+
+    if not compiler_bin.exists():
+        die(
+            "Bundled GCC wrapper is missing:\n"
+            f"    {compiler_bin}"
+        )
+
+    env = macos_verification_environment()
+
+    version = run(
+        [
+            str(compiler_bin),
+            "-dumpfullversion",
+            "-dumpversion",
+        ],
+        check=True,
+        capture_output=True,
+        env=env,
+    ).stdout.strip()
+
+    libgcc = run(
+        [
+            str(compiler_bin),
+            "-print-file-name=libgcc.a",
+        ],
+        check=True,
+        capture_output=True,
+        env=env,
+    ).stdout.strip()
+
+    cc1 = run(
+        [
+            str(compiler_bin),
+            "-print-prog-name=cc1",
+        ],
+        check=True,
+        capture_output=True,
+        env=env,
+    ).stdout.strip()
+
+    log(f"Bundled GCC driver: {version}")
+    log(f"Bundled libgcc.a:    {libgcc}")
+    log(f"Bundled cc1:         {cc1}")
+
+    app_root = MACOS_APP.resolve()
+    for label, value in (("libgcc.a", libgcc), ("cc1", cc1)):
+        resolved = Path(value).resolve()
+        try:
+            resolved.relative_to(app_root)
+        except ValueError:
+            die(
+                f"Bundled GCC {label} escaped the application bundle:\n"
+                f"    {resolved}\n"
+                f"    expected under {app_root}"
+            )
+
+    log("Bundled GCC self-containment: OK")
+
+
+def verify_macos():
+    emacs = (
+        MACOS_APP
+        / "Contents"
+        / "MacOS"
+        / "Emacs"
+    )
+
+    if not emacs.exists():
+        die(
+            "Installation finished but Emacs executable was not found:\n"
+            f"    {emacs}"
+        )
+
+    log()
+    log("========================================")
+    log(" Verifying installed macOS Emacs")
+    log("========================================")
+
+    result = run(
+        [
+            str(emacs),
+            "--batch",
+            "--eval",
+            "(progn "
+            "(princ "
+            "(format "
+            "\"version=%s\\n\" "
+            "emacs-version)) "
+            "(princ "
+            "(format "
+            "\"native-comp=%s\\n\" "
+            "(if "
+            "(native-comp-available-p) "
+            "\"yes\" "
+            "\"no\"))))",
+        ],
+        check=True,
+        capture_output=True,
+        env=macos_verification_environment(),
+    )
+
+    output = result.stdout
+
+    if "native-comp=yes" not in output:
+        die(
+            "Installed Emacs does not report native compilation support."
+        )
+
+    log("Native compilation support: OK")
+
+    verify_bundled_gcc()
+
+    log()
+    log("Running cold native-compilation test...")
+
+    result = run(
+        [
+            str(emacs),
+            "--batch",
+            "--eval",
+            native_comp_test_expression(),
+        ],
+        env=macos_verification_environment(),
+        check=True,
+        capture_output=True,
+    )
+
+    if "native-comp-test=ok" not in result.stdout:
+        die(
+            "Bundled native-compilation test did not succeed."
+        )
+
+    native_output = None
+    for line in result.stdout.splitlines():
+        if line.startswith("native-comp-output="):
+            native_output = line.split("=", 1)[1]
+            break
+
+    if not native_output:
+        die(
+            "Native-compilation test did not report its generated ELN file."
+        )
+
+    if not Path(native_output).exists():
+        die(
+            "Native-compilation test reported a missing ELN file:\n"
+            f"    {native_output}"
+        )
+
+    log(f"Native compilation output: {native_output}")
+    log("Bundled native compilation: OK")
+
+    # Check the installed application for absolute Homebrew paths.
+    brew_root = brew_prefix()
+
+    if not verify_no_external_homebrew_dependencies(
+        MACOS_APP,
+        brew_root,
+    ):
+        die(
+            "The installed application still references Homebrew runtime "
+            "libraries."
+        )
+
+
+def verify_arch():
+    emacs = PREFIX / "bin" / "emacs"
+
+    if not emacs.exists():
+        die(
+            "Installation finished but Emacs executable was not found:\n"
+            f"    {emacs}"
+        )
+
+    log()
+    log("Verifying installed Emacs...")
+
+    run(
+        [
+            str(emacs),
+            "--batch",
+            "--eval",
+            "(princ "
+            "(format "
+            "\"Emacs %s native-comp=%s\\n\" "
+            "emacs-version "
+            "(if "
+            "(native-comp-available-p) "
+            "\"yes\" "
+            "\"no\")))",
+        ],
+        check=True,
+    )
+
+
+def verify_installation(os_type):
+    if os_type == "macos":
+        verify_macos()
+    else:
+        verify_arch()
+
+
+# ============================================================================
+# Uninstall
+# ============================================================================
+
+def uninstall_macos():
+    log()
+    log("========================================")
+    log(" GNU Emacs macOS uninstaller")
+    log("========================================")
+
+    if MACOS_APP.exists():
+        log()
+        log(f"Removing {MACOS_APP}...")
+
+        run(
+            [
+                "sudo",
+                "rm",
+                "-rf",
+                str(MACOS_APP),
+            ]
+        )
+
+    for path in (
+        Path("/usr/local/bin/emacs"),
+        Path("/usr/local/bin/emacsclient"),
+    ):
+        if path.exists() or path.is_symlink():
+            log(
+                f"Removing {path}..."
+            )
+
+            run(
+                [
+                    "sudo",
+                    "rm",
+                    "-f",
+                    str(path),
+                ]
+            )
+
+    log()
+    log(
+        "Homebrew dependencies were NOT automatically removed."
+    )
+    log(
+        "This is intentional."
+    )
+
+
+def uninstall_arch():
+    log()
+    log("========================================")
+    log(" GNU Emacs Arch Linux uninstaller")
+    log("========================================")
+
+    makefile = ARCH_BUILD / "Makefile"
+
+    if makefile.exists():
+        make = make_command("arch")
+
+        log()
+        log("Running make uninstall...")
+
+        run(
+            [
+                "sudo",
+                make,
+                "uninstall",
+            ],
+            cwd=ARCH_BUILD,
+            check=False,
+        )
+    else:
+        log(
+            "\nNo build Makefile found; "
+            "skipping make uninstall."
+        )
+
+    log()
+    log(
+        "Arch build dependencies were NOT automatically removed."
+    )
+    log(
+        "This is intentional."
+    )
+
+
+def uninstall(os_type):
+    if os_type == "macos":
+        uninstall_macos()
+    else:
+        uninstall_arch()
+
+    log()
+    log("========================================")
+    log(" UNINSTALL COMPLETE")
+    log("========================================")
+
+
+# ============================================================================
+# Diagnostics
+# ============================================================================
+
+def print_configuration(
+    os_type,
+    mode,
+    build_dir,
+    revision,
+    jobs,
+    sign_identity,
+):
+    log()
+    log("========================================")
+    log(" GNU Emacs Automated Builder")
+    log("========================================")
+    log(f"Platform:        {os_type}")
+    log(f"Mode:            {mode}")
+    log(f"Bare repository: {BARE_REPO}")
+    log(f"Source worktree: {UPSTREAM_WORKTREE}")
+    log(f"Build worktree:  {build_dir}")
+    log(f"Revision:        {revision}")
+    log(f"Jobs:            {jobs}")
+    log(f"Icon:            {ICON_SRC}")
+
+    if os_type == "macos":
+        if sign_identity is None:
+            log("Signing:          disabled")
+        else:
+            log(f"Signing:          {sign_identity}")
+
+    log("========================================")
+
+
+def print_git_state(build_dir):
+    log()
+    log("Git state:")
+    log(
+        f"  upstream: {current_commit(UPSTREAM_WORKTREE)}"
+    )
+    log(
+        f"  build:    {current_commit(build_dir)}"
+    )
+
+
+# ============================================================================
+# Main build operation
+# ============================================================================
+
+def build_emacs(
+    args,
+    os_type,
+):
+    validate_layout()
+
+    ensure_worktree_registered(
+        UPSTREAM_WORKTREE
+    )
+
+    log()
+    log("Registered worktrees:")
+    log(git_worktree_list())
+
+    ensure_clean_tracked_state()
+
+    if not args.no_deps:
+        ensure_dependencies(
+            os_type
+        )
+
+    revision = update_upstream(
+        args.version
+    )
+
+    build_dir = ensure_build_worktree(
+        os_type
+    )
+
+    ensure_worktree_registered(
+        build_dir
+    )
+
+    reset_build_worktree(
+        build_dir,
+        revision,
+    )
+
+    print_configuration(
+        os_type,
+        args.version,
+        build_dir,
+        revision,
+        args.jobs,
+        args.sign_identity,
+    )
+
+    print_git_state(
+        build_dir
+    )
+
+    env = build_environment(
+        os_type
+    )
+
+    configure(
+        build_dir,
+        os_type,
+        env,
+    )
+
+    build(
+        build_dir,
+        os_type,
+        env,
+        args.jobs,
+    )
+
+    install(
+        build_dir,
+        os_type,
+        args.sign_identity,
+    )
+
+    verify_installation(
+        os_type
+    )
+
+    log()
+    log("========================================")
+    log(" SUCCESS")
+    log("========================================")
+    log(f"Platform: {os_type}")
+    log(f"Revision: {revision}")
+
+    if os_type == "macos":
+        log(f"Application: {MACOS_APP}")
+    else:
+        log(
+            f"Executable: {PREFIX / 'bin' / 'emacs'}"
+        )
+
+    log()
+
+
+# ============================================================================
+# Arguments
+# ============================================================================
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description=(
+            "Build GNU Emacs from an existing bare Git repository "
+            "using dedicated Git worktrees."
+        )
+    )
+
     parser.add_argument(
         "version",
-        choices=["stable", "latest"],
         nargs="?",
+        choices=[
+            "latest",
+            "stable",
+        ],
         default="latest",
-        help="stable release or latest master",
+        help=(
+            "Build latest upstream master or newest stable tag "
+            "(default: latest)."
+        ),
     )
+
     parser.add_argument(
         "--uninstall",
         action="store_true",
-        help="Uninstall Emacs and clean up unused dependencies",
+        help="Uninstall the installed Emacs.",
     )
 
-    args = parser.parse_args()
+    parser.add_argument(
+        "--no-deps",
+        action="store_true",
+        help="Do not install/check platform dependencies.",
+    )
+
+    parser.add_argument(
+        "--jobs",
+        type=int,
+        default=JOBS,
+        help=f"Number of parallel make jobs (default: {JOBS}).",
+    )
+
+    parser.add_argument(
+        "--keep-build",
+        action="store_true",
+        help=(
+            "Keep build artifacts. The build worktree is retained "
+            "regardless."
+        ),
+    )
+
+    signing = parser.add_mutually_exclusive_group()
+
+    signing.add_argument(
+        "--sign",
+        nargs="?",
+        const="-",
+        default="-",
+        metavar="IDENTITY",
+        dest="sign_identity",
+        help=(
+            "Sign the macOS application. Without an identity, use ad-hoc "
+            "signing. A Developer ID identity may be supplied explicitly."
+        ),
+    )
+
+    signing.add_argument(
+        "--no-sign",
+        action="store_const",
+        const=None,
+        dest="sign_identity",
+        help="Do not sign the macOS application.",
+    )
+
+    return parser.parse_args()
+
+
+# ============================================================================
+# Entry point
+# ============================================================================
+
+def main():
+    args = parse_args()
+
+    if args.jobs < 1:
+        die("--jobs must be at least 1.")
 
     os_type = system()
 
     if args.uninstall:
-        uninstall(os_type)
+        uninstall(
+            os_type
+        )
         return
 
-    print(
-        "\n"
-        "========================================\n"
-        " GNU Emacs builder\n"
-        "========================================"
-    )
-
-    print(f"Platform : {os_type}")
-    print(f"Source   : {SRC}")
-    print(f"Version  : {args.version}")
-    print(f"Jobs     : {JOBS}")
-
-    # Basic tools check
     if os_type == "macos":
-        if not Path("/usr/bin/clang").exists():
-            die("Apple Xcode Command Line Tools ('/usr/bin/clang') are missing. Run 'xcode-select --install'.")
+        if not Path(
+            "/usr/bin/clang"
+        ).exists():
+            die(
+                "Apple clang was not found at /usr/bin/clang.\n"
+                "Install Apple's Command Line Tools with:\n\n"
+                "    xcode-select --install"
+            )
 
-    # Always install/ensure dependencies by default
-    print("\nEnsuring dependencies are installed...")
-    deps(os_type)
+        require_command("brew")
+        require_command("otool")
+        require_command("install_name_tool")
+        require_command("sips")
+        require_command("iconutil")
+        require_command("file")
+        require_command("codesign")
 
-    # Existing checkout is updated; missing checkout is cloned.
-    update_source(args.version)
-    clean_repo()
+        if args.sign_identity not in (
+            None,
+            "-",
+        ):
+            log()
+            log(
+                "Checking requested signing identity..."
+            )
 
-    # Git checkout -> configure must be regenerated.
-    run(["./autogen.sh"], cwd=SRC)
+            result = subprocess.run(
+                [
+                    "security",
+                    "find-identity",
+                    "-v",
+                    "-p",
+                    "codesigning",
+                ],
+                text=True,
+                capture_output=True,
+            )
 
-    env = environment(os_type)
+            if result.returncode != 0:
+                die(
+                    "Unable to query macOS code-signing identities."
+                )
 
-    # Run configuration with custom env flags
-    flags = configure(os_type)
-    run(flags, cwd=SRC, env=env)
+            if args.sign_identity not in result.stdout:
+                die(
+                    "Requested signing identity was not found:\n"
+                    f"    {args.sign_identity}\n\n"
+                    "Available identities:\n"
+                    f"{result.stdout}"
+                )
 
-    build(os_type)
-    install(os_type)
+    else:
+        require_command("gcc")
+        require_command("make")
+        require_command("pacman")
 
-    print(
-        "\n"
-        "========================================\n"
-        " SUCCESS\n"
-        "========================================"
-    )
+    try:
+        build_emacs(
+            args,
+            os_type,
+        )
+
+    except KeyboardInterrupt:
+        log()
+        log("*** Interrupted.")
+        sys.exit(130)
 
 
 if __name__ == "__main__":

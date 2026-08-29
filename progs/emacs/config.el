@@ -37,6 +37,13 @@ gcs-done))
 
 (add-hook 'emacs-startup-hook #'start/display-startup-time)
 
+;;(when (memq window-system '(mac ns x))
+;;  (use-package exec-path-from-shell
+;;    :ensure t
+;;    :config
+;;    (exec-path-from-shell-initialize)))
+
+
 (use-package emacs
 :custom
 ;; Keep the interface minimal; these are still relevant in terminals.

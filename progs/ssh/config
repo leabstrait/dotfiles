@@ -1,3 +1,10 @@
-AddKeysToAgent ask
+# Global settings for all platforms
+Host *
+  AddKeysToAgent ask
 
+# macOS-specific configuration (ignored safely on Linux)
+Match exec "uname | grep -q Darwin"
+  UseKeychain yes
+
+# Include your work configurations
 Include ~/.ssh/conf.d/work.config
