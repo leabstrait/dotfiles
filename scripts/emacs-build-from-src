@@ -1563,30 +1563,26 @@ def install_name_id(binary, new):
     )
 
 
-def add_rpath(binary, rpath):
-    if rpath in otool_rpaths(binary):
-        return
+def relative_loader_path(binary, destination):
+    """Return a load-command path from *binary* to *destination*.
 
-    result = run(
-        [
-            "install_name_tool",
-            "-add_rpath",
-            rpath,
-            str(binary),
-        ],
-        check=False,
+    We deliberately use @loader_path instead of adding LC_RPATH entries.
+    Small Mach-O executables (notably etags and other GCC helpers) may not
+    have enough load-command padding for install_name_tool -add_rpath.
+    """
+    binary = Path(binary)
+    destination = Path(destination)
+
+    relative = os.path.relpath(
+        destination,
+        binary.parent,
     )
 
-    if result.returncode != 0:
-        # The rpath may already exist but otool parsing can occasionally
-        # differ across macOS releases.
-        if rpath not in otool_rpaths(binary):
-            raise subprocess.CalledProcessError(
-                result.returncode,
-                result.args,
-            )
+    return "@loader_path/" + relative.replace(os.sep, "/")
 
 
+# ============================================================================
+# Mach-O dependency resolution
 # ============================================================================
 # Mach-O dependency resolution
 # ============================================================================
@@ -1701,6 +1697,46 @@ def source_relative_rpath_candidates(
                 Path(root) / relative
             )
 
+    # Recovery for a previously packaged/staged app.  An earlier failed
+    # packaging attempt may already have rewritten a load command to
+    # @loader_path/../Frameworks/<name> even though the Frameworks copy was
+    # never completed.  The candidate list above can contain a *missing*
+    # path, so recovery must happen after filtering nonexistent candidates.
+    # Resolve the basename against the known dependency roots before
+    # declaring the dependency unresolved.
+    candidates = [
+        candidate
+        for candidate in candidates
+        if candidate.exists()
+    ]
+
+    if not candidates and dependency.startswith((
+        "@loader_path/",
+        "@executable_path/",
+    )):
+        basename = Path(dependency).name
+
+        for root in search_roots:
+            root = Path(root)
+            if not root.exists():
+                continue
+
+            direct = root / basename
+            if direct.exists():
+                candidates.append(direct)
+
+            # Homebrew's opt/lib is normally enough, but allow versioned or
+            # nested dependency layouts as well.  Stop after the first exact
+            # basename match in each root.
+            if not candidates:
+                try:
+                    for match in root.rglob(basename):
+                        if match.is_file():
+                            candidates.append(match)
+                            break
+                except OSError:
+                    pass
+
     return [
         candidate.resolve()
         for candidate in candidates
@@ -1756,14 +1792,50 @@ def is_homebrew_path(path, brew_root):
 # Bundle file copying
 # ============================================================================
 
+def _make_writable(path):
+    """Best-effort removal of restrictive write bits before replacing a path."""
+
+    path = Path(path)
+
+    try:
+        mode = path.stat().st_mode
+        path.chmod(mode | 0o700)
+    except OSError:
+        pass
+
+
+def _rmtree_force(path):
+    """Remove a generated tree even when previous copies made files read-only."""
+
+    path = Path(path)
+    if not path.exists() and not path.is_symlink():
+        return
+
+    def onerror(func, name, exc_info):
+        target = Path(name)
+        _make_writable(target)
+        _make_writable(target.parent)
+        func(name)
+
+    if path.is_dir() and not path.is_symlink():
+        shutil.rmtree(path, onerror=onerror)
+    else:
+        _make_writable(path)
+        path.unlink()
+
+
 def copy_file_preserve(source, destination):
+    destination = Path(destination)
     destination.parent.mkdir(
         parents=True,
         exist_ok=True,
     )
 
-    if destination.exists():
-        return
+    # Generated bundle contents are disposable. Replacing an existing file
+    # is important when --install-existing is recovering from a previous
+    # attempt or when Homebrew has upgraded GCC/libgccjit.
+    if destination.exists() or destination.is_symlink():
+        _rmtree_force(destination)
 
     shutil.copy2(
         source,
@@ -1773,11 +1845,12 @@ def copy_file_preserve(source, destination):
 
 def copy_tree_deref(source, destination):
     """
-    Copy a GCC support tree while dereferencing symlinks.
+    Copy a generated GCC support tree while dereferencing symlinks.
 
-    This is important because Homebrew's opt prefix is itself symlink-based.
-    The application must contain real files rather than symlinks pointing
-    back into /opt/homebrew/Cellar.
+    The destination is replaced rather than merged. This makes retries
+    idempotent and avoids PermissionError when a previous copy left GCC
+    headers or other files read-only. It also prevents stale files from an
+    older Homebrew GCC version from surviving an upgrade.
     """
 
     source = Path(source)
@@ -1786,51 +1859,19 @@ def copy_tree_deref(source, destination):
     if not source.exists():
         return
 
-    destination.mkdir(
+    _rmtree_force(destination)
+    destination.parent.mkdir(
         parents=True,
         exist_ok=True,
     )
 
-    for item in source.iterdir():
-        target = destination / item.name
-
-        if item.is_symlink():
-            resolved = item.resolve()
-
-            if resolved.is_dir():
-                shutil.copytree(
-                    resolved,
-                    target,
-                    symlinks=False,
-                    dirs_exist_ok=True,
-                )
-
-            elif resolved.is_file():
-                target.parent.mkdir(
-                    parents=True,
-                    exist_ok=True,
-                )
-
-                if not target.exists():
-                    shutil.copy2(
-                        resolved,
-                        target,
-                    )
-
-        elif item.is_dir():
-            shutil.copytree(
-                item,
-                target,
-                symlinks=False,
-                dirs_exist_ok=True,
-            )
-
-        else:
-            if not target.exists():
-                shutil.copy2(
-                    item,
-                    target,
-                )
+    # copytree(..., symlinks=False) dereferences symlinks in the source tree
+    # while preserving the actual GCC support-tree contents.
+    shutil.copytree(
+        source,
+        destination,
+        symlinks=False,
+    )
 
 
 def bundle_regular_macho(
@@ -1961,6 +2002,11 @@ def discover_and_bundle_homebrew_dependencies(
 
     frameworks = contents / "Frameworks"
 
+    source_to_destination = {}
+
+    # Discard a previous partial Frameworks tree before discovering the
+    # dependency graph. This makes --install-existing safe to rerun after a
+    # failed packaging step.
     if frameworks.exists():
         shutil.rmtree(frameworks)
 
@@ -1968,8 +2014,6 @@ def discover_and_bundle_homebrew_dependencies(
         parents=True,
         exist_ok=True,
     )
-
-    source_to_destination = {}
 
     pending = []
 
@@ -2068,6 +2112,17 @@ def discover_and_bundle_homebrew_dependencies(
         "frameworks": frameworks,
         "source_to_destination": source_to_destination,
         "brew_root": brew_root,
+        # Keep exactly the same resolution roots for the rewrite pass.
+        # Otherwise an original @rpath dependency such as libtiff can be
+        # discovered successfully above but fail to resolve again when its
+        # load command is rewritten.
+        "search_roots": [
+            frameworks,
+            brew_root / "lib",
+            gcc_info["runtime_dir"],
+            gcc_info["libgccjit"].parent,
+            *gcc_info["search_dirs"].get("libraries", []),
+        ],
     }
 
 
@@ -2296,9 +2351,12 @@ def copy_gcc_compiler_support(
 
     wrapper_content = f"""#!/bin/sh
 
-APP_ROOT=\"$(CDPATH= cd -- \"$(dirname -- \"$0\")/../..\" && pwd)\"
+APP_ROOT=\"$(CDPATH= cd -- \"$(dirname -- \"$0\")/../../..\" && pwd)\"
 
-export GCC_EXEC_PREFIX=\"$APP_ROOT/Resources/gcc/lib/gcc/\"
+# GCC_EXEC_PREFIX replaces GCC's configured installation prefix.  The
+# bundled tree mirrors Homebrew GCC's layout below Resources/gcc, so the
+# prefix must be Resources/gcc/ (not Resources/gcc/lib/gcc/).
+export GCC_EXEC_PREFIX=\"$APP_ROOT/Contents/Resources/gcc/\"
 export COMPILER_PATH=\"$APP_ROOT/Contents/Helpers\"
 
 exec \"$APP_ROOT/Contents/Helpers/{actual_driver_name}\" \"$@\"
@@ -2363,21 +2421,6 @@ exec \"$APP_ROOT/Contents/Helpers/{actual_driver_name}\" \"$@\"
 # Rewrite Mach-O paths
 # ============================================================================
 
-def app_framework_rpath(binary, frameworks):
-    binary = Path(binary)
-    frameworks = Path(frameworks)
-
-    try:
-        relative = os.path.relpath(
-            frameworks,
-            binary.parent,
-        )
-    except ValueError:
-        return None
-
-    return "@loader_path/" + relative
-
-
 def destination_for_dependency(
     dependency,
     source_binary,
@@ -2389,12 +2432,20 @@ def destination_for_dependency(
         bundle_state["source_to_destination"]
     )
 
+    # Prefer the exact source mapping established during dependency
+    # discovery. This is important for absolute Homebrew paths: the file
+    # may already have been copied even though the dependency is expressed
+    # as @rpath/... in the Mach-O load command.
+    if dependency.startswith("/"):
+        absolute = Path(dependency).resolve()
+        mapped = source_to_destination.get(absolute)
+        if mapped is not None:
+            return mapped
+
     resolved = resolve_macho_dependency(
         dependency,
         source_binary,
-        [
-            frameworks,
-        ],
+        bundle_state.get("search_roots", [frameworks]),
     )
 
     if resolved is None:
@@ -2420,6 +2471,46 @@ def destination_for_dependency(
         )
 
     return None
+
+
+def validate_internal_macho_dependencies(app):
+    """Ensure rewritten @loader_path dependencies actually exist.
+
+    Never allow packaging to continue with a load command pointing at a
+    file that was not copied. This catches incomplete Homebrew dependency
+    closure discovery before codesign/install.
+    """
+    failures = []
+
+    for binary in app.rglob("*"):
+        if not binary.is_file() or not is_macho_image(binary):
+            continue
+
+        for dependency in otool_dependencies(binary):
+            if not dependency.startswith("@loader_path/"):
+                continue
+
+            target = (
+                binary.parent
+                / dependency[len("@loader_path/"):]
+            ).resolve()
+
+            if not target.exists():
+                failures.append((binary, dependency, target))
+
+    if failures:
+        lines = [
+            "Bundled Mach-O dependency closure is incomplete:",
+        ]
+        for binary, dependency, target in failures[:20]:
+            lines.append(f"  {binary}")
+            lines.append(f"    {dependency}")
+            lines.append(f"    -> missing {target}")
+        if len(failures) > 20:
+            lines.append(
+                f"  ... and {len(failures) - 20} more"
+            )
+        die("\n".join(lines))
 
 
 def rewrite_bundled_macho(
@@ -2460,24 +2551,16 @@ def rewrite_bundled_macho(
     log()
     log("Rewriting Mach-O dependency paths...")
 
-    # First add rpaths.
-    for binary in unique:
-        rpath = app_framework_rpath(
-            binary,
-            frameworks,
-        )
-
-        if rpath:
-            add_rpath(
-                binary,
-                rpath,
-            )
+    # Do not add LC_RPATH entries here. Instead, bundled dependencies are
+    # rewritten to direct @loader_path references below. This avoids
+    # failures on Mach-O files without enough load-command padding.
 
     # Rewrite dependencies.
     #
-    # We use the original dependency string and the original source path when
-    # resolving the dependency. For bundled copies, the destination is then
-    # rewritten to @rpath/<framework-or-dylib-path>.
+    # We use the original dependency string and original source path when
+    # resolving the dependency. For bundled copies, the dependency is then
+    # rewritten to a direct @loader_path-relative path. This avoids creating
+    # new LC_RPATH load commands in small Mach-O executables.
     for binary in unique:
         dependencies = otool_dependencies(binary)
 
@@ -2501,9 +2584,9 @@ def rewrite_bundled_macho(
             except ValueError:
                 continue
 
-            new_name = (
-                "@rpath/"
-                + str(relative).replace(os.sep, "/")
+            new_name = relative_loader_path(
+                binary,
+                destination,
             )
 
             if dependency == new_name:
@@ -2533,16 +2616,13 @@ def rewrite_bundled_macho(
             continue
 
         try:
-            relative = destination.relative_to(
+            destination.relative_to(
                 frameworks
             )
         except ValueError:
             continue
 
-        desired = (
-            "@rpath/"
-            + str(relative).replace(os.sep, "/")
-        )
+        desired = "@loader_path/" + destination.name
 
         if current_id != desired:
             install_name_id(
@@ -2623,6 +2703,114 @@ def elisp_string(value):
     ) + '"'
 
 
+def bundle_native_lisp(app):
+    """Place Emacs' preloaded native Lisp inside the app bundle.
+
+    A native-comp-enabled Emacs embeds paths to its preloaded ELNs relative
+    to Contents/native-lisp.  The macOS build/install machinery may leave
+    that tree in a sibling native-lisp directory or under the installed
+    lib/emacs tree.  A self-contained Emacs.app must carry the tree with it;
+    otherwise a cold launch fails before native-comp can even be queried.
+
+    Never leave a symlink from the app to the build tree: the installed app
+    must remain usable after the build directory is removed and after
+    Homebrew upgrades.
+    """
+    app = Path(app)
+    contents = app / "Contents"
+    destination = contents / "native-lisp"
+
+    # If it is already populated, keep it.  This also makes retries cheap.
+    if destination.is_dir():
+        preloaded = list(destination.rglob("preloaded/*.eln"))
+        if preloaded:
+            log()
+            log("Bundled native Lisp already present:")
+            log(f"    {destination}")
+            return destination
+
+    # Search the locations used by GNU Emacs' macOS/Unix install layouts.
+    search_roots = [
+        contents / "MacOS" / "lib" / "emacs",
+        contents / "MacOS" / "libexec" / "emacs",
+        app.parent.parent,              # build_dir
+        app.parent,                      # nextstep/
+    ]
+
+    candidates = []
+    seen = set()
+
+    for root in search_roots:
+        root = root.resolve()
+        if root in seen or not root.exists():
+            continue
+        seen.add(root)
+
+        # First check the common direct location.
+        direct = root / "native-lisp"
+        if direct.is_dir() and list(direct.rglob("preloaded/*.eln")):
+            candidates.append(direct)
+
+        # Then tolerate versioned lib/emacs/<version>/native-lisp layouts.
+        try:
+            for candidate in root.rglob("native-lisp"):
+                if not candidate.is_dir():
+                    continue
+                if list(candidate.rglob("preloaded/*.eln")):
+                    candidates.append(candidate)
+        except OSError:
+            pass
+
+    # De-duplicate while preserving search order.
+    unique = []
+    seen = set()
+    for candidate in candidates:
+        candidate = candidate.resolve()
+        if candidate not in seen:
+            seen.add(candidate)
+            unique.append(candidate)
+
+    if not unique:
+        # Native-comp builds have an Emacs.pdmp.  If that exists and there is
+        # no native-lisp tree, this is a packaging error, not an optional
+        # feature that should be silently skipped.
+        pdumps = [
+            contents / "MacOS" / "Emacs.pdmp",
+            contents / "MacOS" / "libexec" / "Emacs.pdmp",
+        ]
+        if any(path.exists() for path in pdumps):
+            die(
+                "Native-compilation is present, but the preloaded native Lisp "
+                "tree could not be found. Expected a native-lisp directory "
+                "containing preloaded/*.eln near the build tree.\n"
+                f"    App: {app}"
+            )
+
+        log()
+        log("No preloaded native-lisp tree found; native compilation is disabled.")
+        return None
+
+    source = unique[0]
+
+    log()
+    log("Bundling preloaded native Lisp:")
+    log(f"    source: {source}")
+    log(f"    target: {destination}")
+
+    copy_tree_deref(
+        source,
+        destination,
+    )
+
+    if not list(destination.rglob("preloaded/*.eln")):
+        die(
+            "Native-lisp copy completed but no preloaded ELN files were found:\n"
+            f"    {destination}"
+        )
+
+    return destination
+
+
 def write_native_comp_site_file(
     app,
     gcc_bundle,
@@ -2678,7 +2866,7 @@ def write_native_comp_site_file(
         for option in unique_options
     )
 
-    site_content = f""";;; site-start.el --- bundled native-comp configuration
+    site_content = f""";;; site-start.el --- bundled native-comp configuration -*- lexical-binding: t; -*-
 ;;;
 ;;; This file was generated by build-emacs.py.
 ;;;
@@ -2687,7 +2875,7 @@ def write_native_comp_site_file(
 
 (let* ((bundle-root
         (expand-file-name
-         "../.."
+         "../../.."
          (file-name-directory
           (or load-file-name buffer-file-name))))
        (contents
@@ -2880,11 +3068,11 @@ def create_icns(icon_source):
         )
         return None
 
-    iconset = Path(
-        tempfile.mkdtemp(
-            prefix="emacs-iconset-"
-        )
-    )
+    # iconutil requires the input directory to have the .iconset suffix.
+    # See Apple's iconset format: the suffix is part of the format marker.
+    iconset_parent = Path(tempfile.mkdtemp(prefix="emacs-iconset-parent-"))
+    iconset = iconset_parent / "Emacs.iconset"
+    iconset.mkdir()
 
     sizes = {
         "icon_16x16.png": 16,
@@ -2942,7 +3130,7 @@ def create_icns(icon_source):
 
     finally:
         shutil.rmtree(
-            iconset,
+            iconset_parent,
             ignore_errors=True,
         )
 
@@ -3021,37 +3209,24 @@ def sign_macos_app(
     app,
     identity,
 ):
+    """Sign the complete app as a bundle.
+
+    Do not sign Contents/MacOS/Emacs directly first.  Emacs installs its
+    pdump file (Emacs.pdmp) alongside the executable in Contents/MacOS;
+    a direct codesign of the executable can incorrectly treat that data file
+    as a nested code object and fail with:
+
+        code object is not signed at all
+        In subcomponent: .../Emacs.pdmp
+
+    macOS's recursive bundle signing handles this layout correctly when the
+    application itself is signed with --deep.  This is also the approach
+    used by emacs-plus for its post-install re-signing.
+    """
     require_command("codesign")
 
     remove_existing_signatures(
         app
-    )
-
-    contents = app / "Contents"
-
-    nested = []
-
-    # Sign actual Mach-O code in standard nested-code locations.
-    for root_name in (
-        "Frameworks",
-        "PlugIns",
-        "XPCServices",
-        "Helpers",
-        "MacOS",
-    ):
-        root = contents / root_name
-
-        if not root.exists():
-            continue
-
-        for path in root.rglob("*"):
-            if path.is_file() and is_macho_image(path):
-                nested.append(path.resolve())
-
-    # Deepest paths first.
-    nested.sort(
-        key=lambda p: len(p.parts),
-        reverse=True,
     )
 
     log()
@@ -3060,55 +3235,10 @@ def sign_macos_app(
     log("========================================")
     log(f"Identity: {identity}")
 
-    for binary in nested:
-        args = [
-            "codesign",
-            "--force",
-            "--sign",
-            identity,
-        ]
-
-        if identity != "-":
-            args.extend([
-                "--timestamp",
-            ])
-
-        # Hardened runtime belongs on the main distributed executable/app,
-        # not on ordinary libraries.
-        run(
-            args + [str(binary)]
-        )
-
-    # Main Emacs executable.
-    emacs_binary = (
-        contents
-        / "MacOS"
-        / "Emacs"
-    )
-
-    if emacs_binary.exists():
-        args = [
-            "codesign",
-            "--force",
-            "--sign",
-            identity,
-        ]
-
-        if identity != "-":
-            args.extend([
-                "--timestamp",
-                "--options",
-                "runtime",
-            ])
-
-        run(
-            args + [str(emacs_binary)]
-        )
-
-    # Finally sign the application itself.
     args = [
         "codesign",
         "--force",
+        "--deep",
         "--sign",
         identity,
     ]
@@ -3123,6 +3253,39 @@ def sign_macos_app(
     run(
         args + [str(app)]
     )
+
+    # .eln files are native Mach-O shared objects, but codesign --deep does
+    # not reliably discover them as nested code in an Emacs bundle.  macOS
+    # dyld nevertheless requires a valid signature before it will dlopen
+    # them when the containing application is signed.  Sign every bundled
+    # native ELN explicitly, then re-sign the outer bundle so its seal
+    # includes the final signatures.
+    eln_files = sorted(
+        path
+        for path in app.rglob("*.eln")
+        if path.is_file()
+    )
+
+    if eln_files:
+        log()
+        log(f"Signing bundled native ELNs: {len(eln_files)}")
+        for eln in eln_files:
+            run(
+                [
+                    "codesign",
+                    "--force",
+                    "--sign",
+                    identity,
+                    *(["--timestamp", "--options", "runtime"]
+                      if identity != "-" else []),
+                    str(eln),
+                ]
+            )
+
+        # Re-seal the application after explicitly signing ELNs.
+        run(
+            args + [str(app)]
+        )
 
     verify_codesign(
         app
@@ -3339,6 +3502,158 @@ def refresh_launch_services(app):
 # macOS installation
 # ============================================================================
 
+def package_and_install_macos(
+    built_app,
+    sign_identity,
+    remove_build_app=False,
+):
+    """Package, verify, sign, and install an existing Emacs.app.
+
+    The build-tree app is retained so a packaging/signing failure can be
+    retried without recompiling Emacs.
+    """
+
+    built_app = Path(built_app)
+
+    if not built_app.exists():
+        die(
+            "Emacs.app was not found:\n"
+            f"    {built_app}"
+        )
+
+    # Everything below happens before final signing.
+    #
+    # This ordering is intentional: install_name_tool and Info.plist/icon
+    # changes invalidate signatures.
+    remove_existing_signatures(
+        built_app
+    )
+
+    gcc_info = gcc_runtime_info()
+
+    bundle_state = (
+        discover_and_bundle_homebrew_dependencies(
+            built_app,
+            gcc_info,
+        )
+    )
+
+    gcc_bundle = (
+        copy_gcc_compiler_support(
+            built_app,
+            gcc_info,
+        )
+    )
+
+    # A native-comp-enabled Emacs embeds preloaded ELN paths relative to
+    # Contents/native-lisp.  Keep that tree inside the app so the installed
+    # bundle is self-contained and survives removal/upgrades of the build
+    # tree and Homebrew dependencies.
+    bundle_native_lisp(
+        built_app,
+    )
+
+    rewrite_bundled_macho(
+        built_app,
+        bundle_state,
+    )
+
+    # Fail here, before signing/install, if any rewritten dependency points
+    # at a file that was not actually bundled.
+    validate_internal_macho_dependencies(
+        built_app
+    )
+
+    write_native_comp_site_file(
+        built_app,
+        gcc_bundle,
+    )
+
+    set_plist_environment(
+        built_app,
+        gcc_bundle,
+    )
+
+    install_macos_icon(
+        built_app
+    )
+
+    if not verify_no_external_homebrew_dependencies(
+        built_app,
+        bundle_state["brew_root"],
+    ):
+        die(
+            "Bundled application still contains absolute Homebrew "
+            "dependencies."
+        )
+
+    if sign_identity is not None:
+        sign_macos_app(
+            built_app,
+            sign_identity,
+        )
+    else:
+        log()
+        log("Code signing disabled by --no-sign.")
+
+    if sign_identity is not None:
+        verify_codesign(
+            built_app
+        )
+
+    log()
+    log("Installing application:")
+    log(f"    {built_app}")
+    log(f" -> {MACOS_APP}")
+
+    run(
+        [
+            "sudo",
+            "rm",
+            "-rf",
+            str(MACOS_APP),
+        ]
+    )
+
+    run(
+        [
+            "sudo",
+            "cp",
+            "-R",
+            str(built_app),
+            str(MACOS_APP.parent),
+        ]
+    )
+
+    if sign_identity is not None:
+        verify_codesign(
+            MACOS_APP
+        )
+
+    install_macos_wrappers()
+
+    refresh_launch_services(
+        MACOS_APP
+    )
+
+    log()
+    log("Bundled GCC:")
+    log(f"    {gcc_info['version']}")
+
+    log("Bundled GCC target:")
+    log(f"    {gcc_info['target']}")
+
+    if remove_build_app and built_app.exists():
+        log()
+        log("Removing generated app from build tree:")
+        log(f"    {built_app}")
+
+        shutil.rmtree(
+            built_app,
+            ignore_errors=True,
+        )
+
+
 def install_macos(
     build_dir,
     sign_identity,
@@ -3370,123 +3685,46 @@ def install_macos(
             f"    {built_app}"
         )
 
-    # Everything below happens before final signing.
-    #
-    # This ordering is intentional: install_name_tool and Info.plist/icon
-    # changes invalidate signatures.
-    remove_existing_signatures(
-        built_app
-    )
-
-    gcc_info = gcc_runtime_info()
-
-    bundle_state = (
-        discover_and_bundle_homebrew_dependencies(
-            built_app,
-            gcc_info,
-        )
-    )
-
-    gcc_bundle = (
-        copy_gcc_compiler_support(
-            built_app,
-            gcc_info,
-        )
-    )
-
-    rewrite_bundled_macho(
+    package_and_install_macos(
         built_app,
-        bundle_state,
+        sign_identity,
+        remove_build_app=False,
     )
 
-    write_native_comp_site_file(
-        built_app,
-        gcc_bundle,
-    )
 
-    set_plist_environment(
-        built_app,
-        gcc_bundle,
-    )
-
-    install_macos_icon(
-        built_app
-    )
-
-    verify_no_external_homebrew_dependencies(
-        built_app,
-        bundle_state["brew_root"],
-    )
-
-    if sign_identity is not None:
-        sign_macos_app(
-            built_app,
-            sign_identity,
-        )
-    else:
-        log()
-        log("Code signing disabled by --no-sign.")
-
-    # Verify the app before copying it.
-    if sign_identity is not None:
-        verify_codesign(
-            built_app
-        )
-
-    log()
-    log("Installing application:")
-    log(f"    {built_app}")
-    log(f" -> {MACOS_APP}")
-
-    run(
-        [
-            "sudo",
-            "rm",
-            "-rf",
-            str(MACOS_APP),
-        ]
-    )
-
-    run(
-        [
-            "sudo",
-            "cp",
-            "-R",
-            str(built_app),
-            str(MACOS_APP.parent),
-        ]
-    )
-
-    # Verify the installed copy before declaring success.
-    if sign_identity is not None:
-        verify_codesign(
-            MACOS_APP
-        )
-
-    install_macos_wrappers()
-
-    refresh_launch_services(
-        MACOS_APP
+def install_existing_macos(
+    sign_identity,
+):
+    built_app = (
+        MACOS_BUILD
+        / "nextstep"
+        / "Emacs.app"
     )
 
     log()
-    log("Bundled GCC:")
-    log(f"    {gcc_info['version']}")
+    log("========================================")
+    log(" Reusing Existing macOS Emacs.app")
+    log("========================================")
 
-    log("Bundled GCC target:")
-    log(f"    {gcc_info['target']}")
-
-    if built_app.exists():
-        log()
-        log("Removing generated app from build tree:")
-        log(f"    {built_app}")
-
-        shutil.rmtree(
-            built_app,
-            ignore_errors=True,
+    if not built_app.exists():
+        die(
+            "No existing build-tree Emacs.app was found:\n"
+            f"    {built_app}\n\n"
+            "Run a normal build first, or preserve the build tree with "
+            "--keep-build."
         )
 
+    log("No compilation or `make install` will be performed.")
 
+    package_and_install_macos(
+        built_app,
+        sign_identity,
+        remove_build_app=False,
+    )
+
+
+# ============================================================================
+# Linux installation
 # ============================================================================
 # Linux installation
 # ============================================================================
@@ -3653,6 +3891,86 @@ def install(
 # Native compilation test
 # ============================================================================
 
+def verify_bundled_gcc_toolchain(gcc_bundle):
+    """Verify the GCC driver resolves its support tree inside Emacs.app."""
+
+    wrapper = Path(
+        gcc_bundle["generic_wrapper"]
+    )
+
+    if not wrapper.exists():
+        die(
+            "Bundled GCC wrapper was not produced:\n"
+            f"    {wrapper}"
+        )
+
+    env = {
+        "HOME": str(Path.home()),
+        "PATH": (
+            "/usr/bin:/bin:/usr/sbin:/sbin"
+        ),
+        "GCC_EXEC_PREFIX": (
+            str(
+                Path(gcc_bundle["gcc_root"])
+                / "lib"
+                / "gcc"
+                / ""
+            )
+        ),
+        "COMPILER_PATH": str(
+            gcc_bundle["helpers"]
+        ),
+    }
+
+    result = run(
+        [
+            str(wrapper),
+            "-print-file-name=libgcc.a",
+        ],
+        check=True,
+        capture_output=True,
+        env=env,
+    )
+
+    libgcc = Path(
+        result.stdout.strip()
+    ).resolve()
+
+    app = Path(
+        gcc_bundle["gcc_root"]
+    ).parents[2]
+
+    if not libgcc.is_relative_to(app):
+        die(
+            "Bundled GCC resolves libgcc.a outside Emacs.app:\n"
+            f"    {libgcc}"
+        )
+
+    result = run(
+        [
+            str(wrapper),
+            "-print-prog-name=cc1",
+        ],
+        check=True,
+        capture_output=True,
+        env=env,
+    )
+
+    cc1 = Path(
+        result.stdout.strip()
+    ).resolve()
+
+    if not cc1.exists() or not cc1.is_relative_to(app):
+        die(
+            "Bundled GCC resolves cc1 outside Emacs.app:\n"
+            f"    {cc1}"
+        )
+
+    log("Bundled GCC toolchain resolution: OK")
+    log(f"  libgcc.a: {libgcc}")
+    log(f"  cc1:      {cc1}")
+
+
 def native_comp_test_expression():
     return (
         "(progn "
@@ -3668,8 +3986,8 @@ def native_comp_test_expression():
         "(let ((result (native-compile tmp))) "
         "(if (and result (file-exists-p result)) "
         "(progn "
-        "(princ (format \"native-comp-output=%s\\n\" result)) "
-        "(princ \"native-comp-test=ok\\n\")) "
+        "(princ \"native-comp-test=ok\\n\") "
+        "(princ (format \"native-comp-output=%s\\n\" result))) "
         "(error \"native-compile did not produce an ELN file\")))) "
         "(ignore-errors "
         "(delete-file tmp)))))"
@@ -3720,80 +4038,6 @@ def macos_verification_environment():
     )
 
     return env
-
-
-def verify_bundled_gcc():
-    """
-    Verify the exact GCC driver bundled into the application.
-
-    This deliberately runs with a minimal environment so a successful test
-    cannot be explained by a Homebrew GCC found through PATH/COMPILER_PATH.
-    """
-
-    compiler_bin = (
-        MACOS_APP
-        / "Contents"
-        / "Resources"
-        / "native-compiler-bin"
-        / "gcc"
-    )
-
-    if not compiler_bin.exists():
-        die(
-            "Bundled GCC wrapper is missing:\n"
-            f"    {compiler_bin}"
-        )
-
-    env = macos_verification_environment()
-
-    version = run(
-        [
-            str(compiler_bin),
-            "-dumpfullversion",
-            "-dumpversion",
-        ],
-        check=True,
-        capture_output=True,
-        env=env,
-    ).stdout.strip()
-
-    libgcc = run(
-        [
-            str(compiler_bin),
-            "-print-file-name=libgcc.a",
-        ],
-        check=True,
-        capture_output=True,
-        env=env,
-    ).stdout.strip()
-
-    cc1 = run(
-        [
-            str(compiler_bin),
-            "-print-prog-name=cc1",
-        ],
-        check=True,
-        capture_output=True,
-        env=env,
-    ).stdout.strip()
-
-    log(f"Bundled GCC driver: {version}")
-    log(f"Bundled libgcc.a:    {libgcc}")
-    log(f"Bundled cc1:         {cc1}")
-
-    app_root = MACOS_APP.resolve()
-    for label, value in (("libgcc.a", libgcc), ("cc1", cc1)):
-        resolved = Path(value).resolve()
-        try:
-            resolved.relative_to(app_root)
-        except ValueError:
-            die(
-                f"Bundled GCC {label} escaped the application bundle:\n"
-                f"    {resolved}\n"
-                f"    expected under {app_root}"
-            )
-
-    log("Bundled GCC self-containment: OK")
 
 
 def verify_macos():
@@ -3847,7 +4091,34 @@ def verify_macos():
 
     log("Native compilation support: OK")
 
-    verify_bundled_gcc()
+    installed_gcc_root = (
+        MACOS_APP
+        / "Contents"
+        / "Resources"
+        / "gcc"
+    )
+
+    installed_helpers = (
+        MACOS_APP
+        / "Contents"
+        / "Helpers"
+    )
+
+    installed_wrapper = (
+        MACOS_APP
+        / "Contents"
+        / "Resources"
+        / "native-compiler-bin"
+        / "gcc"
+    )
+
+    verify_bundled_gcc_toolchain(
+        {
+            "generic_wrapper": installed_wrapper,
+            "gcc_root": installed_gcc_root,
+            "helpers": installed_helpers,
+        }
+    )
 
     log()
     log("Running cold native-compilation test...")
@@ -3869,24 +4140,6 @@ def verify_macos():
             "Bundled native-compilation test did not succeed."
         )
 
-    native_output = None
-    for line in result.stdout.splitlines():
-        if line.startswith("native-comp-output="):
-            native_output = line.split("=", 1)[1]
-            break
-
-    if not native_output:
-        die(
-            "Native-compilation test did not report its generated ELN file."
-        )
-
-    if not Path(native_output).exists():
-        die(
-            "Native-compilation test reported a missing ELN file:\n"
-            f"    {native_output}"
-        )
-
-    log(f"Native compilation output: {native_output}")
     log("Bundled native compilation: OK")
 
     # Check the installed application for absolute Homebrew paths.
@@ -4231,9 +4484,20 @@ def parse_args():
     parser.add_argument(
         "--keep-build",
         action="store_true",
+        default=True,
         help=(
-            "Keep build artifacts. The build worktree is retained "
-            "regardless."
+            "Keep build artifacts and the generated Emacs.app (default). "
+            "The build worktree is retained regardless."
+        ),
+    )
+
+    parser.add_argument(
+        "--install-existing",
+        action="store_true",
+        help=(
+            "Reuse the existing macOS Emacs.app produced by the last build "
+            "and rerun only packaging/install steps. No compilation is done. "
+            "The build-tree app is retained."
         ),
     )
 
@@ -4339,6 +4603,28 @@ def main():
         require_command("pacman")
 
     try:
+        if args.install_existing:
+            if os_type != "macos":
+                die(
+                    "--install-existing is only supported on macOS."
+                )
+
+            install_existing_macos(
+                args.sign_identity,
+            )
+
+            verify_installation(
+                os_type
+            )
+
+            log()
+            log("========================================")
+            log(" SUCCESS")
+            log("========================================")
+            log(f"Application: {MACOS_APP}")
+            log()
+            return
+
         build_emacs(
             args,
             os_type,
