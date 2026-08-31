@@ -1,10 +1,4 @@
 #!/usr/bin/env python3
-"""Small macOS Emacs source installer.
-
-Homebrew owns all dependencies, including gcc/libgccjit. Nothing from GCC is
-copied into Emacs.app. The build app is kept so packaging/install failures can
-be retried with --install-existing without recompiling.
-"""
 from __future__ import annotations
 
 import argparse
@@ -16,298 +10,389 @@ import sys
 import tempfile
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent
-REPO = Path(os.environ.get("EMACS_REPO", ROOT / "../.." / "emacs")).resolve()
-UPSTREAM = Path(os.environ.get("EMACS_SOURCE", REPO / "worktrees/upstream")).resolve()
-BUILD = Path(os.environ.get("EMACS_BUILD", REPO / "worktrees/build/macos")).resolve()
-PREFIX = BUILD / "nextstep"
-APP = PREFIX / "Emacs.app"
-INSTALL = Path("/Applications/Emacs.app")
-LINUX_PREFIX = Path(os.environ.get("EMACS_PREFIX", Path.home() / ".local"))
+PATH_REPO_ROOT = Path.home() / "ws/i/emacs"
+PATH_REPO_GITDIR = PATH_REPO_ROOT / ".git"
 
-BREW_PKGS = [
+URL_REMOTE_UPSTREAM = "https://git.savannah.gnu.org/git/emacs.git"
+URL_REMOTE_UPSTREAM_MIRROR = "https://github.com/emacs-mirror/emacs.git"
+
+PATH_WORKTREE_UPSTREAM = PATH_REPO_ROOT / "worktrees/upstream"
+PATH_WORKTREE_BUILD = PATH_REPO_ROOT / "worktrees" / "build" / ("macos" if sys.platform == "darwin" else "linux")
+
+PATH_ASSET_ICON = PATH_WORKTREE_UPSTREAM / "etc" / "icon.png"
+
+PATH_FILE_BUILD_CHANNEL = PATH_WORKTREE_BUILD / ".emacs-build-channel"
+
+PATH_PREFIX_LINUX = Path('usr/local/')
+
+PATH_PREFIX_MACOS = PATH_WORKTREE_BUILD / "nextstep"
+PATH_APP_MACOS_BUILD = PATH_PREFIX_MACOS / "Emacs.app"
+PATH_APP_MACOS_INSTALL = Path("/Applications/Emacs.app")
+
+DEPS_MACOS_BREW_PACKAGES = [
     "gcc", "libgccjit", "pkg-config", "gnutls", "libxml2", "tree-sitter",
-    "jpeg", "libpng", "giflib", "libtiff", "webp", "librsvg", "gdk-pixbuf",
-    "cairo", "glib", "gettext", "lcms2", "sqlite",
+    "jpeg-turbo", "libpng", "giflib", "libtiff", "webp", "librsvg", "gdk-pixbuf",
+    "glib", "gettext", "lcms2", "sqlite", "texlive", "imagemagick",
+    "jansson", "mailutils", "netpbm", "cairo", "harfbuzz"
 ]
 
 
-def run(*cmd: str, cwd: Path | None = None, env=None, check=True) -> subprocess.CompletedProcess[str]:
+# --- SYSTEM & PROCESS UTILITIES ---
+def system_cmd_run(*cmd, cwd=None, env=None, check=True):
     print("\n>>>", " ".join(cmd))
     return subprocess.run(cmd, cwd=cwd, env=env, text=True, check=check)
 
-
-def out(*cmd: str, cwd: Path | None = None, env=None) -> str:
+def system_cmd_out(*cmd, cwd=None, env=None):
     return subprocess.check_output(cmd, cwd=cwd, env=env, text=True).strip()
 
-
-def die(msg: str) -> None:
-    raise SystemExit(f"\n*** ERROR: {msg}")
-
-
-def require_tools() -> None:
-    if sys.platform != "darwin":
-        die("not a macOS invocation")
-    for tool in ("brew", "git", "make", "clang", "codesign", "plutil"):
-        if shutil.which(tool) is None:
-            die(f"missing required command: {tool}")
+def system_die(msg_text):
+    raise SystemExit(f"\n*** ERROR: {msg_text}")
 
 
-def brew_prefix() -> Path:
-    return Path(out("brew", "--prefix"))
-
-
-def gcc_bin() -> Path:
-    prefix = Path(out("brew", "--prefix", "gcc"))
-    candidates = sorted(prefix.glob("bin/gcc-[0-9]*"))
-    candidates = [p for p in candidates if p.is_file() and os.access(p, os.X_OK)]
-    if not candidates:
-        die(f"cannot find versioned Homebrew GCC in {prefix / 'bin'}")
-    return candidates[-1]
-
-
-def gcc_support_lib() -> Path:
-    gcc = gcc_bin()
-    value = out(str(gcc), "-print-file-name=libemutls_w.a")
-    if not value or value == "libemutls_w.a" or not Path(value).is_absolute():
-        die(f"{gcc} cannot resolve libemutls_w.a (got {value!r})")
-    p = Path(value).resolve().parent
-    if not p.is_dir():
-        die(f"GCC support library directory does not exist: {p}")
-    return p
-
-
-def gcc_lib_dir() -> Path:
-    # The directory containing libgccjit/libgccjit*.dylib.
-    return Path(out("brew", "--prefix", "libgccjit")) / "lib"
-
-
-def install_deps() -> None:
-    run("brew", "update")
-    run("brew", "install", *BREW_PKGS)
-
-
-def build() -> None:
-    install_deps()
-    BUILD.mkdir(parents=True, exist_ok=True)
-    configure = UPSTREAM / "configure"
-    if not configure.exists():
-        run("./autogen.sh", cwd=UPSTREAM)
-
-    brew = brew_prefix()
-    gcc = gcc_bin()
-    gcc_root = Path(out("brew", "--prefix", "gcc"))
-    jit_root = Path(out("brew", "--prefix", "libgccjit"))
-    env = os.environ.copy()
-    env["PATH"] = f"{gcc_root / 'bin'}:{brew / 'bin'}:{env.get('PATH', '')}"
-    env["CPATH"] = f"{gcc_root / 'include'}:{jit_root / 'include'}:{env.get('CPATH', '')}"
-    env["LIBRARY_PATH"] = f"{gcc_support_lib()}:{gcc_lib_dir()}:{env.get('LIBRARY_PATH', '')}"
-    env["PKG_CONFIG_PATH"] = f"{brew / 'lib/pkgconfig'}:{env.get('PKG_CONFIG_PATH', '')}"
-
-    cflags = (
-        f"-DFD_SETSIZE=10000 -DDARWIN_UNLIMITED_SELECT "
-        f"-I{brew / 'opt/sqlite/include'} -I{gcc_root / 'include'} -I{jit_root / 'include'}"
+# --- GIT UTILITIES ---
+def git_remote_get(cwd_path, remote_name):
+    cmd_result = subprocess.run(
+        ("git", "remote", "get-url", remote_name),
+        cwd=cwd_path,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        check=False,
     )
-    ldflags = f"-L{brew / 'opt/sqlite/lib'} -L{gcc_lib_dir()} -L{gcc_support_lib()}"
+    return cmd_result.stdout.strip() if cmd_result.returncode == 0 else None
 
-    if (BUILD / "Makefile").exists():
-        print("==> Reusing configured build tree")
+def git_remote_ensure(repo_path, remote_name, remote_url):
+    url_current = git_remote_get(repo_path, remote_name)
+    if url_current is None:
+        system_cmd_run("git", "remote", "add", remote_name, remote_url, cwd=repo_path)
+        return
+    if url_current != remote_url:
+        print(f"==> Updating git remote {remote_name}")
+        system_cmd_run("git", "remote", "set-url", remote_name, remote_url, cwd=repo_path)
+
+def git_repo_setup():
+    PATH_REPO_ROOT.mkdir(parents=True, exist_ok=True)
+    (PATH_REPO_ROOT / "worktrees").mkdir(parents=True, exist_ok=True)
+
+    if not PATH_REPO_GITDIR.exists():
+        print(f"==> Cloning Emacs repository into {PATH_REPO_GITDIR}")
+        system_cmd_run("git", "clone", "--bare", URL_REMOTE_UPSTREAM, str(PATH_REPO_GITDIR))
+
+    git_remote_ensure(PATH_REPO_GITDIR, "upstream", URL_REMOTE_UPSTREAM)
+    git_remote_ensure(PATH_REPO_GITDIR, "upstream-mirror", URL_REMOTE_UPSTREAM_MIRROR)
+
+    system_cmd_run("git", "fetch", "upstream", cwd=PATH_REPO_GITDIR)
+    system_cmd_run("git", "fetch", "upstream-mirror", cwd=PATH_REPO_GITDIR)
+
+    if not PATH_WORKTREE_UPSTREAM.exists():
+        print(f"==> Creating Emacs source worktree: {PATH_WORKTREE_UPSTREAM}")
+        system_cmd_run("git", "--git-dir", str(PATH_REPO_GITDIR), "worktree", "add", str(PATH_WORKTREE_UPSTREAM), "master")
+
+    git_remote_ensure(PATH_WORKTREE_UPSTREAM, "upstream", URL_REMOTE_UPSTREAM)
+    git_remote_ensure(PATH_WORKTREE_UPSTREAM, "upstream-mirror", URL_REMOTE_UPSTREAM_MIRROR)
+
+def git_channel_checkout(channel_name):
+    branch_target = "master" if channel_name == "latest" else "emacs-31"
+
+    if not PATH_WORKTREE_UPSTREAM.exists():
+        system_die(f"missing Emacs source tree: {PATH_WORKTREE_UPSTREAM}")
+
+    system_cmd_run("git", "fetch", "upstream", branch_target, cwd=PATH_WORKTREE_UPSTREAM)
+
+    branch_current = system_cmd_out("git", "branch", "--show-current", cwd=PATH_WORKTREE_UPSTREAM)
+
+    if branch_current != branch_target:
+        git_status = system_cmd_out("git", "status", "--porcelain", cwd=PATH_WORKTREE_UPSTREAM)
+        if git_status:
+            system_die(f"{PATH_WORKTREE_UPSTREAM} has uncommitted changes; cannot switch from {branch_current or 'detached HEAD'} to {branch_target}")
+        system_cmd_run("git", "switch", branch_target, cwd=PATH_WORKTREE_UPSTREAM)
+
+    system_cmd_run("git", "reset", "--hard", f"upstream/{branch_target}", cwd=PATH_WORKTREE_UPSTREAM)
+
+
+# --- ENVIRONMENT & DEPENDENCY VALIDATION ---
+def tools_require_macos():
+    if sys.platform != "darwin":
+        system_die("not a macOS invocation")
+    for tool_name in ("brew", "git", "make", "clang", "codesign", "plutil"):
+        if shutil.which(tool_name) is None:
+            system_die(f"missing required command: {tool_name}")
+
+def tools_require_linux():
+    # Base compilation tools
+    required_binaries = ("git", "make", "gcc", "pkg-config")
+    for tool_name in required_binaries:
+        if shutil.which(tool_name) is None:
+            system_die(f"missing required command: '{tool_name}' (pacman: base-devel)")
+
+    # Arch Linux pkg-config module to pacman package mapping
+    pkg_checks = [
+        ("tree-sitter", "tree-sitter"),
+        ("jansson", "jansson"),
+        ("gnutls", "gnutls"),
+        ("librsvg-2.0", "librsvg"),
+        ("libwebp", "libwebp"),
+        ("libxml-2.0", "libxml2"),
+        ("MagickWand", "imagemagick"),
+        ("cairo", "cairo"),
+        ("harfbuzz", "harfbuzz"),
+        ("lcms2", "lcms2"),
+        ("sqlite3", "sqlite"),
+        ("gtk+-3.0", "gtk3"),
+        ("webkit2gtk-4.1", "webkit2gtk-4.1")
+    ]
+
+    missing_pkgs = []
+    for pkg_module, arch_package in pkg_checks:
+        cmd_result = subprocess.run(["pkg-config", "--exists", pkg_module], check=False)
+        if cmd_result.returncode != 0:
+            missing_pkgs.append(f"{pkg_module} (pacman -S {arch_package})")
+
+    if missing_pkgs:
+        system_die("Missing Arch Linux development libraries required for configure flags:\n  " + "\n  ".join(missing_pkgs))
+
+# --- BREW / TOOLCHAIN UTILITIES ---
+def brew_prefix_path():
+    return Path(system_cmd_out("brew", "--prefix"))
+
+def brew_gcc_bin_path():
+    path_gcc_prefix = Path(system_cmd_out("brew", "--prefix", "gcc"))
+    bin_candidates = sorted(path_gcc_prefix.glob("bin/gcc-[0-9]*"))
+    bin_candidates = [p for p in bin_candidates if p.is_file() and os.access(p, os.X_OK)]
+    if not bin_candidates:
+        system_die(f"cannot find versioned Homebrew GCC in {path_gcc_prefix / 'bin'}")
+    return bin_candidates[-1]
+
+def brew_gcc_support_lib_path():
+    path_gcc_bin = brew_gcc_bin_path()
+    res_value = system_cmd_out(str(path_gcc_bin), "-print-file-name=libemutls_w.a")
+    if not res_value or res_value == "libemutls_w.a" or not Path(res_value).is_absolute():
+        system_die(f"{path_gcc_bin} cannot resolve libemutls_w.a (got {res_value!r})")
+    path_lib_dir = Path(res_value).resolve().parent
+    if not path_lib_dir.is_dir():
+        system_die(f"GCC support library directory does not exist: {path_lib_dir}")
+    return path_lib_dir
+
+def brew_gcc_lib_dir_path():
+    return Path(system_cmd_out("brew", "--prefix", "libgccjit")) / "lib"
+
+def deps_install_macos():
+    system_cmd_run("brew", "update")
+    system_cmd_run("brew", "install", *DEPS_MACOS_BREW_PACKAGES)
+
+
+# --- ASSETS ---
+def icon_apply_macos(app_path):
+    if not PATH_ASSET_ICON.exists():
+        return
+    path_iconset = PATH_WORKTREE_BUILD / "Emacs.iconset"
+    path_iconset.mkdir(parents=True, exist_ok=True)
+    size_scales = [(16,1), (16,2), (32,1), (32,2), (128,1), (128,2), (256,1), (256,2), (512,1), (512,2)]
+    for size, scale in size_scales:
+        pixels = size * scale
+        file_name = f"icon_{size}x{size}.png" if scale == 1 else f"icon_{size}x{size}@2x.png"
+        system_cmd_run("sips", "-z", str(pixels), str(pixels), str(PATH_ASSET_ICON), "--out", str(path_iconset / file_name), check=False)
+    path_icns = app_path / "Contents" / "Resources" / "Emacs.icns"
+    system_cmd_run("iconutil", "-c", "icns", str(path_iconset), "-o", str(path_icns), check=False)
+
+def icon_apply_linux():
+    if not PATH_ASSET_ICON.exists():
+        return
+    sizes = [16, 32, 48, 128, 256, 512]
+    for size in sizes:
+        path_dest_dir = PATH_PREFIX_LINUX / "share" / "icons" / "hicolor" / f"{size}x{size}" / "apps"
+        path_dest_dir.mkdir(parents=True, exist_ok=True)
+        if shutil.which("convert"):
+            system_cmd_run("convert", str(PATH_ASSET_ICON), "-resize", f"{size}x{size}", str(path_dest_dir / "emacs.png"), check=False)
+        else:
+            shutil.copy(PATH_ASSET_ICON, path_dest_dir / "emacs.png")
+
+
+# --- BUILD PROCEDURES ---
+def emacs_build(channel_name):
+    if sys.platform == "darwin":
+        deps_install_macos()
+    PATH_WORKTREE_BUILD.mkdir(parents=True, exist_ok=True)
+
+    channel_previous = PATH_FILE_BUILD_CHANNEL.read_text().strip() if PATH_FILE_BUILD_CHANNEL.exists() else None
+    if channel_previous and channel_previous != channel_name:
+        print(f"==> Source channel changed: {channel_previous} -> {channel_name}; rebuilding configuration")
+        shutil.rmtree(PATH_WORKTREE_BUILD)
+        PATH_WORKTREE_BUILD.mkdir(parents=True, exist_ok=True)
+
+    PATH_FILE_BUILD_CHANNEL.write_text(channel_name + "\n")
+
+    path_configure = PATH_WORKTREE_UPSTREAM / "configure"
+    if not path_configure.exists():
+        system_cmd_run("./autogen.sh", cwd=PATH_WORKTREE_UPSTREAM)
+
+    env_build = os.environ.copy()
+
+    if sys.platform == "darwin":
+        path_brew = brew_prefix_path()
+        path_gcc = brew_gcc_bin_path()
+        path_gcc_root = Path(system_cmd_out("brew", "--prefix", "gcc"))
+        path_jit_root = Path(system_cmd_out("brew", "--prefix", "libgccjit"))
+        env_build["PATH"] = f"{path_gcc_root / 'bin'}:{path_brew / 'bin'}:{env_build.get('PATH', '')}"
+        env_build["CPATH"] = f"{path_gcc_root / 'include'}:{path_jit_root / 'include'}:{env_build.get('CPATH', '')}"
+        env_build["LIBRARY_PATH"] = f"{brew_gcc_support_lib_path()}:{brew_gcc_lib_dir_path()}:{env_build.get('LIBRARY_PATH', '')}"
+        env_build["PKG_CONFIG_PATH"] = f"{path_brew / 'lib/pkgconfig'}:{path_brew / 'share/pkgconfig'}:{env_build.get('PKG_CONFIG_PATH', '')}"
+
+        flags_c = f"-DFD_SETSIZE=10000 -DDARWIN_UNLIMITED_SELECT -I{path_brew / 'opt/sqlite/include'} -I{path_gcc_root / 'include'} -I{path_jit_root / 'include'}"
+        flags_ld = f"-L{path_brew / 'opt/sqlite/lib'} -L{brew_gcc_lib_dir_path()} -L{brew_gcc_support_lib_path()}"
+
+        if (PATH_WORKTREE_BUILD / "Makefile").exists():
+            print("==> Reusing configured build tree")
+        else:
+            configure_args = [
+                str(path_configure),
+                f"--prefix={PATH_PREFIX_MACOS}",
+                "--with-ns", "--disable-ns-self-contained",
+                "--with-native-compilation=aot", "--with-modules",
+                "--with-rsvg", "--with-webp", "--with-xml2", "--with-gnutls",
+                "--with-tree-sitter", "--with-json", "--with-imagemagick",
+                "--with-cairo", "--with-harfbuzz", "--with-lcms2", "--with-sqlite3",
+                "--with-mailutils", "--with-compress-install",
+                "--disable-dependency-tracking", "--disable-silent-rules",
+                f"CFLAGS={flags_c}", f"LDFLAGS={flags_ld}",
+            ]
+            system_cmd_run(*configure_args, cwd=PATH_WORKTREE_BUILD, env=env_build)
     else:
-        args = [
-            str(configure),
-            f"--prefix={PREFIX}",
-            "--with-ns", "--disable-ns-self-contained",
-            "--with-native-compilation=aot", "--with-modules",
-            "--with-rsvg", "--with-webp", "--with-xml2", "--with-gnutls",
-            "--disable-dependency-tracking", "--disable-silent-rules",
-            f"CFLAGS={cflags}", f"LDFLAGS={ldflags}",
-        ]
-        run(*args, cwd=BUILD, env=env)
+        if (PATH_WORKTREE_BUILD / "Makefile").exists():
+            print("==> Reusing configured build tree")
+        else:
+            configure_args = [
+                str(path_configure),
+                f"--prefix={PATH_PREFIX_LINUX}",
+                "--with-native-compilation=aot", "--with-modules",
+                "--with-tree-sitter", "--with-json", "--with-gnutls",
+                "--with-rsvg", "--with-webp", "--with-xml2", "--with-imagemagick",
+                "--with-cairo", "--with-harfbuzz", "--with-lcms2", "--with-sqlite3",
+                "--with-mailutils", "--with-x-toolkit=gtk3", "--with-xwidgets",
+                "--with-sound=alsa", "--with-compress-install",
+            ]
+            system_cmd_run(*configure_args, cwd=PATH_WORKTREE_BUILD, env=env_build)
 
-    run("make", f"-j{os.cpu_count() or 4}", cwd=BUILD, env=env)
-    run("make", "install", cwd=BUILD, env=env)
-    print(f"\n==> Build app: {APP}")
+    system_cmd_run("make", f"-j{os.cpu_count() or 4}", cwd=PATH_WORKTREE_BUILD, env=env_build)
+    system_cmd_run("make", "install", cwd=PATH_WORKTREE_BUILD, env=env_build)
 
 
-def write_native_comp_config(app: Path) -> None:
-    site = app / "Contents/Resources/site-lisp/site-start.el"
-    site.parent.mkdir(parents=True, exist_ok=True)
-    text = r''';; -*- lexical-binding: t; -*-
-
-;; Homebrew native-comp integration.
-;; GCC/libgccjit remain outside Emacs.app.
-
+# --- CONFIGURATION & PACKAGING ---
+def config_native_comp_write(app_path):
+    path_site_lisp = app_path / "Contents/Resources/site-lisp/site-start.el"
+    path_site_lisp.parent.mkdir(parents=True, exist_ok=True)
+    elisp_text = r''';; -*- lexical-binding: t; -*-
 (require 'comp)
-
 (let* ((brew "/opt/homebrew/bin/brew")
-       (prefix
-        (when (file-executable-p brew)
-          (string-trim
-           (shell-command-to-string
-            (concat (shell-quote-argument brew) " --prefix")))))
-       (gcc-prefix
-        (and prefix
-             (expand-file-name "opt/gcc" prefix)))
-       (jit-prefix
-        (and prefix
-             (expand-file-name "opt/libgccjit" prefix)))
-       (gcc
-        (and gcc-prefix
-             (car
-              (sort
-               (file-expand-wildcards
-                (expand-file-name "bin/gcc-[0-9]*" gcc-prefix))
-               #'string>))))
-       (emutls
-        (when (and gcc
-                   (file-executable-p gcc))
-          (string-trim
-           (shell-command-to-string
-            (concat
-             (shell-quote-argument gcc)
-             " -print-file-name=libemutls_w.a")))))
-       (gcc-lib
-        (and emutls
-             (file-name-directory emutls)))
-       (jit-lib
-        (and jit-prefix
-             (expand-file-name "lib" jit-prefix))))
-
+       (prefix (when (file-executable-p brew) (string-trim (shell-command-to-string (concat (shell-quote-argument brew) " --prefix")))))
+       (gcc-prefix (and prefix (expand-file-name "opt/gcc" prefix)))
+       (jit-prefix (and prefix (expand-file-name "opt/libgccjit" prefix)))
+       (gcc (and gcc-prefix (car (sort (file-expand-wildcards (expand-file-name "bin/gcc-[0-9]*" gcc-prefix)) #'string>))))
+       (emutls (when (and gcc (file-executable-p gcc)) (string-trim (shell-command-to-string (concat (shell-quote-argument gcc) " -print-file-name=libemutls_w.a")))))
+       (gcc-lib (and emutls (file-name-directory emutls)))
+       (jit-lib (and jit-prefix (expand-file-name "lib" jit-prefix))))
   (dolist (dir (list gcc-lib jit-lib))
-    (when (and dir
-               (file-directory-p dir))
-      (add-to-list
-       'native-comp-driver-options
-       (concat "-L" (directory-file-name dir))))))
+    (when (and dir (file-directory-p dir))
+      (add-to-list 'native-comp-driver-options (concat "-L" (directory-file-name dir))))))
 '''
-    site.write_text(text)
+    path_site_lisp.write_text(elisp_text)
 
+def plist_gui_library_path_set(app_path):
+    path_plist = app_path / "Contents/Info.plist"
+    if not path_plist.exists():
+        system_die(f"missing Info.plist: {path_plist}")
+    with path_plist.open("rb") as f_in:
+        plist_data = plistlib.load(f_in)
+    env_vars = dict(plist_data.get("LSEnvironment", {}))
+    env_vars["LIBRARY_PATH"] = f"{brew_gcc_support_lib_path()}:{brew_gcc_lib_dir_path()}"
+    plist_data["LSEnvironment"] = env_vars
+    with path_plist.open("wb") as f_out:
+        plistlib.dump(plist_data, f_out, fmt=plistlib.FMT_XML, sort_keys=False)
 
-def set_gui_library_path(app: Path) -> None:
-    plist = app / "Contents/Info.plist"
-    if not plist.exists():
-        die(f"missing Info.plist: {plist}")
-    with plist.open("rb") as f:
-        data = plistlib.load(f)
-    env = dict(data.get("LSEnvironment", {}))
-    env["LIBRARY_PATH"] = f"{gcc_support_lib()}:{gcc_lib_dir()}"
-    data["LSEnvironment"] = env
-    with plist.open("wb") as f:
-        plistlib.dump(data, f, fmt=plistlib.FMT_XML, sort_keys=False)
+def app_sign(app_path):
+    system_cmd_run("codesign", "--force", "--deep", "--sign", "-", str(app_path))
+    system_cmd_run("codesign", "--verify", "--deep", "--strict", str(app_path))
 
+def emacs_package_and_install():
+    if sys.platform == "darwin":
+        if not PATH_APP_MACOS_BUILD.exists():
+            system_die(f"no existing build app: {PATH_APP_MACOS_BUILD}\nRun without --install-existing first.")
+        with tempfile.TemporaryDirectory(prefix="emacs-app-stage-") as temp_dir:
+            path_stage = Path(temp_dir) / "Emacs.app"
+            print(f"==> Staging {PATH_APP_MACOS_BUILD} -> {path_stage}")
+            shutil.copytree(PATH_APP_MACOS_BUILD, path_stage, symlinks=True)
+            config_native_comp_write(path_stage)
+            plist_gui_library_path_set(path_stage)
+            icon_apply_macos(path_stage)
+            app_sign(path_stage)
 
-def sign(app: Path) -> None:
-    # Deep ad-hoc signing is sufficient for a locally built unsigned app and
-    # signs nested .eln/.dylib/code objects without maintaining a fragile list.
-    run("codesign", "--force", "--deep", "--sign", "-", str(app))
-    run("codesign", "--verify", "--deep", "--strict", str(app))
+            PATH_APP_MACOS_INSTALL.parent.mkdir(parents=True, exist_ok=True)
+            if PATH_APP_MACOS_INSTALL.exists() or PATH_APP_MACOS_INSTALL.is_symlink():
+                system_cmd_run("sudo", "rm", "-rf", str(PATH_APP_MACOS_INSTALL))
+            system_cmd_run("sudo", "ditto", str(path_stage), str(PATH_APP_MACOS_INSTALL))
 
+        verify_macos(PATH_APP_MACOS_INSTALL)
+        print(f"\n==> Installed {PATH_APP_MACOS_INSTALL}")
+        print(f"==> Reusable build app remains at {PATH_APP_MACOS_BUILD}")
+    else:
+        icon_apply_linux()
+        verify_linux()
+        print(f"\n==> Installed to {PATH_PREFIX_LINUX}")
 
-def package_and_install() -> None:
-    if not APP.exists():
-        die(f"no existing build app: {APP}\nRun without --install-existing first.")
-
-    # Never mutate the reusable build app.
-    with tempfile.TemporaryDirectory(prefix="emacs-app-stage-") as td:
-        stage = Path(td) / "Emacs.app"
-        print(f"==> Staging {APP} -> {stage}")
-        shutil.copytree(APP, stage, symlinks=True)
-        write_native_comp_config(stage)
-        set_gui_library_path(stage)
-        sign(stage)
-
-        INSTALL.parent.mkdir(parents=True, exist_ok=True)
-        if INSTALL.exists() or INSTALL.is_symlink():
-            run("sudo", "rm", "-rf", str(INSTALL))
-        run("sudo", "ditto", str(stage), str(INSTALL))
-
-    verify(INSTALL)
-    print(f"\n==> Installed {INSTALL}")
-    print(f"==> Reusable build app remains at {APP}")
-
-
-def verify(app: Path) -> None:
-    emacs = app / "Contents/MacOS/Emacs"
-    if not emacs.exists():
-        die(f"missing Emacs executable: {emacs}")
+def verify_macos(app_path):
+    path_emacs_executable = app_path / "Contents/MacOS/Emacs"
+    if not path_emacs_executable.exists():
+        system_die(f"missing Emacs executable: {path_emacs_executable}")
     print("\n========================================")
     print(" Verifying installed macOS Emacs")
     print("========================================")
-    run(str(emacs), "--batch", "--eval",
+    system_cmd_run(str(path_emacs_executable), "--batch", "--eval",
         '(progn (princ (format "version=%s\\n" emacs-version)) '
         '(princ (format "native-comp=%s\\n" '
         '(if (native-comp-available-p) "yes" "no"))))')
-    gcc = gcc_bin()
-    lib = out(str(gcc), "-print-file-name=libemutls_w.a")
-    if not Path(lib).is_absolute() or not Path(lib).exists():
-        die(f"Homebrew GCC cannot resolve libemutls_w.a: {lib}")
-    print(f"GCC support: {Path(lib).parent}")
-    print(f"libgccjit:    {gcc_lib_dir()}")
+    path_gcc = brew_gcc_bin_path()
+    path_lib = system_cmd_out(str(path_gcc), "-print-file-name=libemutls_w.a")
+    if not Path(path_lib).is_absolute() or not Path(path_lib).exists():
+        system_die(f"Homebrew GCC cannot resolve libemutls_w.a: {path_lib}")
+    print(f"GCC support: {Path(path_lib).parent}")
+    print(f"libgccjit:    {brew_gcc_lib_dir_path()}")
     print("Native compilation support: OK")
 
-
-# ------------------------------ Linux --------------------------------------
-
-def linux_build():
-    require_tools_linux()
-    build = BUILD / "linux"
-    build.mkdir(parents=True, exist_ok=True)
-    if not (UPSTREAM / "configure").exists():
-        run("./autogen.sh", cwd=UPSTREAM)
-    if not (build / "Makefile").exists():
-        run(UPSTREAM / "configure",
-            f"--prefix={LINUX_PREFIX}",
-            "--with-native-compilation=aot", "--with-modules",
-            "--with-tree-sitter", "--with-json", "--with-gnutls",
-            cwd=build)
-    else:
-        print("==> Reusing configured Linux build tree")
-    run("make", f"-j{os.cpu_count() or 4}", cwd=build)
-    run("make", "install", cwd=build)
-
-
-def require_tools_linux():
-    for tool in ("git", "make", "gcc", "pkg-config"):
-        if shutil.which(tool) is None:
-            die(f"missing required command: {tool}")
-
-
 def verify_linux():
-    emacs = LINUX_PREFIX / "bin" / "emacs"
-    if not emacs.exists():
-        die(f"missing Linux Emacs: {emacs}")
-    run(str(emacs), "--batch", "--eval",
+    path_emacs_executable = PATH_PREFIX_LINUX / "bin" / "emacs"
+    if not path_emacs_executable.exists():
+        system_die(f"missing Linux Emacs: {path_emacs_executable}")
+    print("\n========================================")
+    print(" Verifying installed Linux Emacs")
+    print("========================================")
+    system_cmd_run(str(path_emacs_executable), "--batch", "--eval",
         '(progn (princ (format "version=%s\\n" emacs-version)) '
         '(princ (format "native-comp=%s\\n" '
         '(if (native-comp-available-p) "yes" "no"))))')
 
 
-def main() -> None:
-    p = argparse.ArgumentParser(description="Simple Homebrew-managed Emacs builder")
-    p.add_argument("--install-existing", action="store_true",
-                   help="macOS: package existing build app without recompiling")
-    p.add_argument("--verify", action="store_true", help="verify installed Emacs")
-    args = p.parse_args()
+# --- MAIN ENTRY POINT ---
+def main():
+    arg_parser = argparse.ArgumentParser(description="Emacs builder")
+    arg_parser.add_argument("channel", nargs="?", choices=("latest", "stable"), default="latest", help="Emacs source channel (default: latest)")
+    arg_parser.add_argument("--clean", action="store_true", help="discard the existing build configuration and build from scratch")
+    parsed_args = arg_parser.parse_args()
+
+    git_repo_setup()
+
+    if parsed_args.clean:
+        shutil.rmtree(PATH_WORKTREE_BUILD, ignore_errors=True)
 
     if sys.platform == "darwin":
-        require_tools()
-        if args.verify:
-            verify(INSTALL)
-        elif args.install_existing:
-            package_and_install()
-        else:
-            build()
-            package_and_install()
+        tools_require_macos()
     elif sys.platform.startswith("linux"):
-        if args.install_existing:
-            die("--install-existing is only supported on macOS")
-        if args.verify:
-            verify_linux()
-        else:
-            linux_build()
+        tools_require_linux()
     else:
-        die(f"unsupported platform: {sys.platform}")
+        system_die(f"unsupported platform: {sys.platform}")
 
+    git_channel_checkout(parsed_args.channel)
+    emacs_build(parsed_args.channel)
+    emacs_package_and_install()
 
 if __name__ == "__main__":
     main()
