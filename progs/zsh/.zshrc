@@ -8,42 +8,8 @@
 # 1. PATH CONFIGURATION & TOOLCHAIN SETUP
 # ---------------------------------------------------------------------
 
-echo $PATH
-
 export PATH="$HOME/.local/bin:$PATH"
-echo "=============================="
 
-echo $PATH
-# case "$(uname -s)" in
-#     Darwin) # macOS Homebrew GNU Toolchain Overrides
-#         if [[ -n "$HOMEBREW_PREFIX" ]]; then
-#             export PATH="$HOMEBREW_PREFIX/opt/curl/bin:$PATH"
-#             export PATH="$HOMEBREW_PREFIX/opt/gnu-getopt/bin:$PATH"
-#             export PATH="$HOMEBREW_PREFIX/opt/jpeg/bin:$PATH"
-#             export PATH="$HOMEBREW_PREFIX/opt/binutils/bin:$PATH"
-#             export PATH="$HOMEBREW_PREFIX/opt/gnu-indent/bin:$PATH"
-#             export PATH="$HOMEBREW_PREFIX/opt/gnu-which/bin:$PATH"
-
-#             local gnu_tools=(coreutils findutils gnu-sed gnu-tar gawk grep make diffutils ed gpatch wdiff gnu-indent gnu-which)
-#             for tool in "${gnu_tools[@]}"; do
-#                 export PATH="$HOMEBREW_PREFIX/opt/$tool/libexec/gnubin:$PATH"
-#                 export MANPATH="$HOMEBREW_PREFIX/opt/$tool/libexec/gnuman:$MANPATH"
-#             done
-
-#             alias objdump='gobjdump'
-#             alias nm='gnm'
-#             alias size='gsize'
-#             alias strings='gstrings'
-#             alias ar='gar'
-#             alias ranlib='granlib'
-#             alias indent='gindent'
-#             alias which='gwhich'
-#         fi
-#         ;;
-#     Linux)
-#         # Arch Linux uses native standard toolchain paths
-#         ;;
-# esac
 
 # ---------------------------------------------------------------------
 # 2. EDITOR, PAGER & FORMATTING ENVIRONMENT
