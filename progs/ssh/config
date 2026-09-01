@@ -1,12 +1,10 @@
 # Global settings for all platforms
 IgnoreUnknown UseKeychain
+AddKeysToAgent ask
 
-Host *
-  AddKeysToAgent ask
-
-# macOS-specific configuration (ignored safely on Linux)
-Match exec "uname | grep -q Darwin"
-  UseKeychain yes
-
-# Include your work configurations
+# Include your work configurations (must be outside/before Match blocks)
 Include ~/.ssh/conf.d/work.config
+
+# macOS-specific configuration
+Match exec "uname | grep -q Darwin"
+    UseKeychain yes
