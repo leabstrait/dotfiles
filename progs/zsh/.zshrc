@@ -50,10 +50,10 @@ setopt HIST_SAVE_NO_DUPS
 # 4. FILE MANAGEMENT & NAVIGATION ALIASES
 # ---------------------------------------------------------------------
 alias cat='bat'
-alias ls='eza -lh --color=always --group-directories-first --icons=always'
+alias ls='eza -h --color=always --group-directories-first --icons=always'
 alias ll='ls -l'
-alias la='ls -la'
-alias lsd='ls -ld *(-/DN)'
+alias la='ls -a'
+alias lla='ls -la'
 alias tree='eza --tree'
 
 alias cp='cp -riv'

@@ -1,4 +1,6 @@
 # Global settings for all platforms
+IgnoreUnknown UseKeychain
+
 Host *
   AddKeysToAgent ask
 

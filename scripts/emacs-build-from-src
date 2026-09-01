@@ -8,23 +8,23 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
+# --- PATH & CONFIGURATION ---
 PATH_REPO_ROOT = Path.home() / "ws/i/emacs"
 PATH_REPO_GITDIR = PATH_REPO_ROOT / ".git"
 
 URL_REMOTE_UPSTREAM = "https://git.savannah.gnu.org/git/emacs.git"
 URL_REMOTE_UPSTREAM_MIRROR = "https://github.com/emacs-mirror/emacs.git"
 
-PATH_WORKTREE_UPSTREAM = PATH_REPO_ROOT / "worktrees/upstream"
-PATH_WORKTREE_BUILD = PATH_REPO_ROOT / "worktrees" / "build" / ("macos" if sys.platform == "darwin" else "linux")
-
-PATH_ASSET_ICON = PATH_WORKTREE_UPSTREAM / "etc" / "icon.png"
+PATH_WORKTREE_MASTER = PATH_REPO_ROOT / "worktrees" / "master"
+PATH_WORKTREE_STABLE_ROOT = PATH_REPO_ROOT / "worktrees" / "stable"
+PATH_WORKTREE_BUILD = PATH_REPO_ROOT / "worktrees" / "build" / ("macos" if sys.platform == "darwin" else "archlinux")
 
 PATH_FILE_BUILD_CHANNEL = PATH_WORKTREE_BUILD / ".emacs-build-channel"
 
-PATH_PREFIX_LINUX = Path('usr/local/')
-
+PATH_PREFIX_LINUX = Path("/usr/local")
 PATH_PREFIX_MACOS = PATH_WORKTREE_BUILD / "nextstep"
 PATH_APP_MACOS_BUILD = PATH_PREFIX_MACOS / "Emacs.app"
 PATH_APP_MACOS_INSTALL = Path("/Applications/Emacs.app")
@@ -36,89 +36,199 @@ DEPS_MACOS_BREW_PACKAGES = [
     "jansson", "mailutils", "netpbm", "cairo", "harfbuzz"
 ]
 
+DEPS_LINUX_PACMAN_PACKAGES = [
+    "base-devel", "git", "gcc", "pkgconf", "tree-sitter", "jansson",
+    "gnutls", "librsvg", "libwebp", "libxml2", "imagemagick", "cairo",
+    "harfbuzz", "lcms2", "sqlite", "gtk3", "webkit2gtk-4.1", "alsa-lib"
+]
+
+
+# --- LOGGING UTILITIES ---
+def log_section(title: str):
+    print(f"\n==================================================")
+    print(f"  {title}")
+    print(f"==================================================")
+
+def log_info(msg: str):
+    print(f"[INFO] {msg}")
+
+def log_ok(msg: str):
+    print(f"[OK]   {msg}")
+
+def log_warn(msg: str):
+    print(f"[WARN] {msg}")
+
 
 # --- SYSTEM & PROCESS UTILITIES ---
 def system_cmd_run(*cmd, cwd=None, env=None, check=True):
-    print("\n>>>", " ".join(cmd))
+    print(f"\n>>> Running: {' '.join(cmd)}")
     return subprocess.run(cmd, cwd=cwd, env=env, text=True, check=check)
 
 def system_cmd_out(*cmd, cwd=None, env=None):
     return subprocess.check_output(cmd, cwd=cwd, env=env, text=True).strip()
 
 def system_die(msg_text):
-    raise SystemExit(f"\n*** ERROR: {msg_text}")
+    print(f"\n[ERROR] {msg_text}", file=sys.stderr)
+    raise SystemExit(1)
 
 
 # --- GIT UTILITIES ---
-def git_remote_get(cwd_path, remote_name):
-    cmd_result = subprocess.run(
+def git_remote_get_url(repo_path, remote_name):
+    """Returns configured URL for remote_name or None if non-existent."""
+    res = subprocess.run(
         ("git", "remote", "get-url", remote_name),
-        cwd=cwd_path,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
-        check=False,
+        cwd=repo_path, text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False
     )
-    return cmd_result.stdout.strip() if cmd_result.returncode == 0 else None
+    return res.stdout.strip() if res.returncode == 0 else None
 
-def git_remote_ensure(repo_path, remote_name, remote_url):
-    url_current = git_remote_get(repo_path, remote_name)
-    if url_current is None:
-        system_cmd_run("git", "remote", "add", remote_name, remote_url, cwd=repo_path)
-        return
-    if url_current != remote_url:
-        print(f"==> Updating git remote {remote_name}")
-        system_cmd_run("git", "remote", "set-url", remote_name, remote_url, cwd=repo_path)
+def git_remote_ensure(repo_path, remote_name, target_url):
+    """Checks remote configuration at repo_path; sets, updates, or confirms if up-to-date."""
+    current_url = git_remote_get_url(repo_path, remote_name)
+    target_url_str = str(target_url)
+
+    if current_url is None:
+        log_info(f"Adding missing remote '{remote_name}' -> {target_url_str}")
+        system_cmd_run("git", "remote", "add", remote_name, target_url_str, cwd=repo_path)
+    elif current_url != target_url_str:
+        log_info(f"Updating remote '{remote_name}': {current_url} -> {target_url_str}")
+        system_cmd_run("git", "remote", "set-url", remote_name, target_url_str, cwd=repo_path)
+    else:
+        log_ok(f"Remote '{remote_name}' is up-to-date ({target_url_str})")
+
+def git_verify_and_sync_remotes():
+    """Verifies all required remotes in bare repo and fetches latest state on start."""
+    log_info(f"Verifying remote configurations in bare repository ({PATH_REPO_GITDIR})...")
+    git_remote_ensure(PATH_REPO_GITDIR, "upstream", URL_REMOTE_UPSTREAM)
+    git_remote_ensure(PATH_REPO_GITDIR, "upstream-mirror", URL_REMOTE_UPSTREAM_MIRROR)
+
+def git_sync_origin_repo(ref_spec=None):
+    """Fetches updates from upstream into bare repo (origin), falling back to mirror if needed."""
+    fetch_target = ref_spec if ref_spec else "master"
+    log_info(f"Fetching '{fetch_target}' and tags into bare repo (origin) from upstream...")
+
+    # Safely fetch into remote-tracking branches instead of updating checked-out local heads directly
+    spec_args = ["+refs/heads/*:refs/remotes/upstream/*", "--tags"] if fetch_target == "master" else ["--tags"]
+
+    res = subprocess.run(
+        ("git", "fetch", "upstream", *spec_args),
+        cwd=PATH_REPO_GITDIR, check=False
+    )
+    if res.returncode != 0:
+        log_warn("Upstream fetch failed or unreachable. Retrying with upstream-mirror...")
+        system_cmd_run("git", "fetch", "upstream-mirror", *spec_args, cwd=PATH_REPO_GITDIR)
+    else:
+        log_ok("Successfully updated bare repository from upstream")
+
+def git_detect_latest_stable_tag():
+    """Dynamically finds the highest official stable release tag in origin."""
+    git_sync_origin_repo(ref_spec="--tags")
+    out = system_cmd_out(
+        "git", "tag", "-l", "emacs-[0-9]*.[0-9]*",
+        cwd=PATH_REPO_GITDIR
+    )
+    tags = [t.strip() for t in out.splitlines() if t.strip() and "pre" not in t and "rc" not in t]
+
+    if not tags:
+        log_warn("No tag matches found; falling back to emacs-29.4")
+        return "emacs-29.4"
+
+    def parse_version(tag_name):
+        ver_str = tag_name.replace("emacs-", "")
+        parts = []
+        for p in ver_str.split("."):
+            try:
+                parts.append(int(p))
+            except ValueError:
+                parts.append(0)
+        return parts
+
+    latest_tag = sorted(tags, key=parse_version)[-1]
+    log_ok(f"Detected latest stable release tag: '{latest_tag}'")
+    return latest_tag
+
+def git_worktree_ensure(path_worktree, target_ref):
+    """Ensures a worktree exists and registers 'origin' pointing back to bare gitdir."""
+    if not path_worktree.exists():
+        path_worktree.parent.mkdir(parents=True, exist_ok=True)
+        log_info(f"Creating worktree for '{target_ref}' at: {path_worktree}")
+
+        if target_ref == "master":
+            system_cmd_run(
+                "git", "--git-dir", str(PATH_REPO_GITDIR),
+                "worktree", "add", str(path_worktree), "master"
+            )
+        else:
+            system_cmd_run(
+                "git", "--git-dir", str(PATH_REPO_GITDIR),
+                "worktree", "add", "--detach", str(path_worktree), f"tags/{target_ref}"
+            )
+    else:
+        log_ok(f"Worktree directory exists: {path_worktree}")
+
+    # Register origin remote inside worktree pointing to bare gitdir
+    git_remote_ensure(path_worktree, "origin", str(PATH_REPO_GITDIR))
 
 def git_repo_setup():
+    log_section("Git Repository Initial Setup")
     PATH_REPO_ROOT.mkdir(parents=True, exist_ok=True)
     (PATH_REPO_ROOT / "worktrees").mkdir(parents=True, exist_ok=True)
 
     if not PATH_REPO_GITDIR.exists():
-        print(f"==> Cloning Emacs repository into {PATH_REPO_GITDIR}")
+        log_info(f"Initializing bare repository at {PATH_REPO_GITDIR}")
         system_cmd_run("git", "clone", "--bare", URL_REMOTE_UPSTREAM, str(PATH_REPO_GITDIR))
 
-    git_remote_ensure(PATH_REPO_GITDIR, "upstream", URL_REMOTE_UPSTREAM)
-    git_remote_ensure(PATH_REPO_GITDIR, "upstream-mirror", URL_REMOTE_UPSTREAM_MIRROR)
+    # Verify and fix bare repo remotes (upstream, upstream-mirror)
+    git_verify_and_sync_remotes()
 
-    system_cmd_run("git", "fetch", "upstream", cwd=PATH_REPO_GITDIR)
-    system_cmd_run("git", "fetch", "upstream-mirror", cwd=PATH_REPO_GITDIR)
+    # Sync bare repository master branch from upstream
+    git_sync_origin_repo("master")
 
-    if not PATH_WORKTREE_UPSTREAM.exists():
-        print(f"==> Creating Emacs source worktree: {PATH_WORKTREE_UPSTREAM}")
-        system_cmd_run("git", "--git-dir", str(PATH_REPO_GITDIR), "worktree", "add", str(PATH_WORKTREE_UPSTREAM), "master")
+    # Ensure master worktree exists
+    git_worktree_ensure(PATH_WORKTREE_MASTER, "master")
 
-    git_remote_ensure(PATH_WORKTREE_UPSTREAM, "upstream", URL_REMOTE_UPSTREAM)
-    git_remote_ensure(PATH_WORKTREE_UPSTREAM, "upstream-mirror", URL_REMOTE_UPSTREAM_MIRROR)
+    # Guarantee master worktree has origin configured (even if worktree pre-existed)
+    if PATH_WORKTREE_MASTER.exists():
+        git_remote_ensure(PATH_WORKTREE_MASTER, "origin", str(PATH_REPO_GITDIR))
 
-def git_channel_checkout(channel_name):
-    branch_target = "master" if channel_name == "latest" else "emacs-31"
+def git_sync_worktree(path_worktree, target_ref):
+    """Verifies worktree's origin remote, updates origin from upstream, then syncs worktree."""
+    log_section(f"Syncing Worktree: {path_worktree.name} ({target_ref})")
+    git_remote_ensure(path_worktree, "origin", str(PATH_REPO_GITDIR))
 
-    if not PATH_WORKTREE_UPSTREAM.exists():
-        system_die(f"missing Emacs source tree: {PATH_WORKTREE_UPSTREAM}")
-
-    system_cmd_run("git", "fetch", "upstream", branch_target, cwd=PATH_WORKTREE_UPSTREAM)
-
-    branch_current = system_cmd_out("git", "branch", "--show-current", cwd=PATH_WORKTREE_UPSTREAM)
-
-    if branch_current != branch_target:
-        git_status = system_cmd_out("git", "status", "--porcelain", cwd=PATH_WORKTREE_UPSTREAM)
-        if git_status:
-            system_die(f"{PATH_WORKTREE_UPSTREAM} has uncommitted changes; cannot switch from {branch_current or 'detached HEAD'} to {branch_target}")
-        system_cmd_run("git", "switch", branch_target, cwd=PATH_WORKTREE_UPSTREAM)
-
-    system_cmd_run("git", "reset", "--hard", f"upstream/{branch_target}", cwd=PATH_WORKTREE_UPSTREAM)
+    if target_ref == "master":
+        git_sync_origin_repo("master")
+        log_info("Updating master worktree from upstream (via origin)...")
+        system_cmd_run("git", "fetch", "origin", cwd=path_worktree)
+        # Rebase local commits on top of incoming upstream/master commits
+        system_cmd_run("git", "rebase", "origin/master", cwd=path_worktree)
+    else:
+        git_sync_origin_repo("--tags")
+        log_info(f"Fetching tags from origin for {path_worktree.name}...")
+        system_cmd_run("git", "fetch", "origin", "--tags", cwd=path_worktree)
+        log_info(f"Worktree {path_worktree.name} is pinned to tag 'tags/{target_ref}'")
+        system_cmd_run("git", "checkout", "--detach", f"tags/{target_ref}", cwd=path_worktree)
 
 
 # --- ENVIRONMENT & DEPENDENCY VALIDATION ---
 def tools_require_macos():
+    log_section("Validating macOS Build Environment")
     if sys.platform != "darwin":
-        system_die("not a macOS invocation")
+        system_die("Not a macOS invocation")
     for tool_name in ("brew", "git", "make", "clang", "codesign", "plutil"):
         if shutil.which(tool_name) is None:
-            system_die(f"missing required command: {tool_name}")
+            system_die(f"Missing required command: {tool_name}")
+    log_ok("Required system tools verified")
 
 def tools_require_linux():
+    log_section("Validating Linux Build Environment")
+    if not sys.platform.startswith("linux"):
+        system_die("Not a Linux invocation")
+    if shutil.which("pacman") is None:
+        system_die("pacman package manager not found. This script targets Arch Linux.")
+
+    log_info("Ensuring Arch Linux dependencies are installed via pacman...")
+    system_cmd_run("sudo", "pacman", "-S", "--needed", "--noconfirm", *DEPS_LINUX_PACMAN_PACKAGES)
+
     # Base compilation tools
     required_binaries = ("git", "make", "gcc", "pkg-config")
     for tool_name in required_binaries:
@@ -160,7 +270,7 @@ def brew_gcc_bin_path():
     bin_candidates = sorted(path_gcc_prefix.glob("bin/gcc-[0-9]*"))
     bin_candidates = [p for p in bin_candidates if p.is_file() and os.access(p, os.X_OK)]
     if not bin_candidates:
-        system_die(f"cannot find versioned Homebrew GCC in {path_gcc_prefix / 'bin'}")
+        system_die(f"Cannot find versioned Homebrew GCC in {path_gcc_prefix / 'bin'}")
     return bin_candidates[-1]
 
 def brew_gcc_support_lib_path():
@@ -177,13 +287,17 @@ def brew_gcc_lib_dir_path():
     return Path(system_cmd_out("brew", "--prefix", "libgccjit")) / "lib"
 
 def deps_install_macos():
+    log_info("Updating Homebrew and installing required packages...")
     system_cmd_run("brew", "update")
     system_cmd_run("brew", "install", *DEPS_MACOS_BREW_PACKAGES)
 
 
 # --- ASSETS ---
-def icon_apply_macos(app_path):
-    if not PATH_ASSET_ICON.exists():
+def icon_apply_macos(app_path, source_worktree):
+    log_info("Generating icons for macOS app bundle...")
+    asset_icon = source_worktree / "etc" / "icon.png"
+    if not asset_icon.exists():
+        log_warn(f"Icon source does not exist: {asset_icon}")
         return
     path_iconset = PATH_WORKTREE_BUILD / "Emacs.iconset"
     path_iconset.mkdir(parents=True, exist_ok=True)
@@ -191,40 +305,71 @@ def icon_apply_macos(app_path):
     for size, scale in size_scales:
         pixels = size * scale
         file_name = f"icon_{size}x{size}.png" if scale == 1 else f"icon_{size}x{size}@2x.png"
-        system_cmd_run("sips", "-z", str(pixels), str(pixels), str(PATH_ASSET_ICON), "--out", str(path_iconset / file_name), check=False)
+        system_cmd_run("sips", "-z", str(pixels), str(pixels), str(asset_icon), "--out", str(path_iconset / file_name), check=False)
     path_icns = app_path / "Contents" / "Resources" / "Emacs.icns"
     system_cmd_run("iconutil", "-c", "icns", str(path_iconset), "-o", str(path_icns), check=False)
 
-def icon_apply_linux():
-    if not PATH_ASSET_ICON.exists():
+def icon_apply_linux(source_worktree):
+    log_info("Installing system icons for Linux...")
+    asset_icon = source_worktree / "etc" / "icon.png"
+    if not asset_icon.exists():
+        log_warn(f"Icon source does not exist: {asset_icon}")
         return
     sizes = [16, 32, 48, 128, 256, 512]
-    for size in sizes:
-        path_dest_dir = PATH_PREFIX_LINUX / "share" / "icons" / "hicolor" / f"{size}x{size}" / "apps"
-        path_dest_dir.mkdir(parents=True, exist_ok=True)
-        if shutil.which("convert"):
-            system_cmd_run("convert", str(PATH_ASSET_ICON), "-resize", f"{size}x{size}", str(path_dest_dir / "emacs.png"), check=False)
-        else:
-            shutil.copy(PATH_ASSET_ICON, path_dest_dir / "emacs.png")
+    with tempfile.TemporaryDirectory(prefix="emacs-icons-") as temp_dir:
+        path_stage = Path(temp_dir)
+        for size in sizes:
+            path_icon_stage = path_stage / f"emacs-{size}.png"
+
+            if shutil.which("magick"):
+                system_cmd_run("magick", str(asset_icon), "-resize", f"{size}x{size}", str(path_icon_stage), check=False)
+            else:
+                shutil.copy2(asset_icon, path_icon_stage)
+
+            path_dest_dir = (PATH_PREFIX_LINUX / "share" / "icons" / "hicolor" / f"{size}x{size}" / "apps" / "emacs.png")
+            system_cmd_run("sudo", "install", "-Dm644", str(path_icon_stage), str(path_dest_dir))
+
+def desktop_apply_linux():
+    log_info("Installing .desktop entry for Linux...")
+    path_desktop_stage = PATH_WORKTREE_BUILD / "emacs.desktop"
+    path_emacs = PATH_PREFIX_LINUX / "bin" / "emacs"
+    desktop_text = f"""[Desktop Entry]
+Name=Emacs
+GenericName=Text Editor
+Comment=GNU Emacs
+Exec={path_emacs} %F
+Icon=emacs
+Type=Application
+Terminal=false
+Categories=Development;TextEditor;
+MimeType=text/plain;text/x-c;text/x-c++;text/x-java;text/x-python;text/x-shellscript;text/x-makefile;text/x-cmake;
+StartupWMClass=Emacs;
+"""
+    path_desktop_stage.write_text(desktop_text)
+    path_desktop_dest = PATH_PREFIX_LINUX / "share" / "applications" / "emacs.desktop"
+    system_cmd_run("sudo", "install", "-Dm644", str(path_desktop_stage), str(path_desktop_dest))
 
 
 # --- BUILD PROCEDURES ---
-def emacs_build(channel_name):
+def emacs_build_from_source(source_worktree, channel_name):
+    log_section(f"Compiling Emacs Source (Channel: {channel_name})")
+
     if sys.platform == "darwin":
         deps_install_macos()
     PATH_WORKTREE_BUILD.mkdir(parents=True, exist_ok=True)
 
     channel_previous = PATH_FILE_BUILD_CHANNEL.read_text().strip() if PATH_FILE_BUILD_CHANNEL.exists() else None
     if channel_previous and channel_previous != channel_name:
-        print(f"==> Source channel changed: {channel_previous} -> {channel_name}; rebuilding configuration")
+        log_info(f"Source channel changed: {channel_previous} -> {channel_name}; clearing build cache")
         shutil.rmtree(PATH_WORKTREE_BUILD)
         PATH_WORKTREE_BUILD.mkdir(parents=True, exist_ok=True)
 
     PATH_FILE_BUILD_CHANNEL.write_text(channel_name + "\n")
 
-    path_configure = PATH_WORKTREE_UPSTREAM / "configure"
+    path_configure = source_worktree / "configure"
     if not path_configure.exists():
-        system_cmd_run("./autogen.sh", cwd=PATH_WORKTREE_UPSTREAM)
+        log_info("Generating configure script via autogen.sh...")
+        system_cmd_run("./autogen.sh", cwd=source_worktree)
 
     env_build = os.environ.copy()
 
@@ -242,8 +387,9 @@ def emacs_build(channel_name):
         flags_ld = f"-L{path_brew / 'opt/sqlite/lib'} -L{brew_gcc_lib_dir_path()} -L{brew_gcc_support_lib_path()}"
 
         if (PATH_WORKTREE_BUILD / "Makefile").exists():
-            print("==> Reusing configured build tree")
+            log_ok("Reusing configured build tree")
         else:
+            log_info("Running configure script for macOS...")
             configure_args = [
                 str(path_configure),
                 f"--prefix={PATH_PREFIX_MACOS}",
@@ -259,8 +405,9 @@ def emacs_build(channel_name):
             system_cmd_run(*configure_args, cwd=PATH_WORKTREE_BUILD, env=env_build)
     else:
         if (PATH_WORKTREE_BUILD / "Makefile").exists():
-            print("==> Reusing configured build tree")
+            log_ok("Reusing configured build tree")
         else:
+            log_info("Running configure script for Linux...")
             configure_args = [
                 str(path_configure),
                 f"--prefix={PATH_PREFIX_LINUX}",
@@ -268,17 +415,21 @@ def emacs_build(channel_name):
                 "--with-tree-sitter", "--with-json", "--with-gnutls",
                 "--with-rsvg", "--with-webp", "--with-xml2", "--with-imagemagick",
                 "--with-cairo", "--with-harfbuzz", "--with-lcms2", "--with-sqlite3",
-                "--with-mailutils", "--with-x-toolkit=gtk3", "--with-xwidgets",
+                "--with-mailutils", "--with-pgtk", "--with-xwidgets",
                 "--with-sound=alsa", "--with-compress-install",
             ]
             system_cmd_run(*configure_args, cwd=PATH_WORKTREE_BUILD, env=env_build)
 
+    log_info("Compiling source code with make...")
     system_cmd_run("make", f"-j{os.cpu_count() or 4}", cwd=PATH_WORKTREE_BUILD, env=env_build)
-    system_cmd_run("make", "install", cwd=PATH_WORKTREE_BUILD, env=env_build)
+
+    log_info("Running make install...")
+    system_cmd_run("sudo", "make", "install", cwd=PATH_WORKTREE_BUILD, env=env_build)
 
 
 # --- CONFIGURATION & PACKAGING ---
 def config_native_comp_write(app_path):
+    log_info("Injecting native-comp configuration into site-start.el...")
     path_site_lisp = app_path / "Contents/Resources/site-lisp/site-start.el"
     path_site_lisp.parent.mkdir(parents=True, exist_ok=True)
     elisp_text = r''';; -*- lexical-binding: t; -*-
@@ -298,9 +449,10 @@ def config_native_comp_write(app_path):
     path_site_lisp.write_text(elisp_text)
 
 def plist_gui_library_path_set(app_path):
+    log_info("Updating Info.plist LSEnvironment LIBRARY_PATH...")
     path_plist = app_path / "Contents/Info.plist"
     if not path_plist.exists():
-        system_die(f"missing Info.plist: {path_plist}")
+        system_die(f"Missing Info.plist: {path_plist}")
     with path_plist.open("rb") as f_in:
         plist_data = plistlib.load(f_in)
     env_vars = dict(plist_data.get("LSEnvironment", {}))
@@ -310,42 +462,46 @@ def plist_gui_library_path_set(app_path):
         plistlib.dump(plist_data, f_out, fmt=plistlib.FMT_XML, sort_keys=False)
 
 def app_sign(app_path):
+    log_info(f"Ad-hoc signing application bundle: {app_path}")
     system_cmd_run("codesign", "--force", "--deep", "--sign", "-", str(app_path))
     system_cmd_run("codesign", "--verify", "--deep", "--strict", str(app_path))
 
-def emacs_package_and_install():
+def emacs_package_and_install(source_worktree):
+    log_section("Packaging & Installation")
     if sys.platform == "darwin":
         if not PATH_APP_MACOS_BUILD.exists():
-            system_die(f"no existing build app: {PATH_APP_MACOS_BUILD}\nRun without --install-existing first.")
+            system_die(f"No existing build app: {PATH_APP_MACOS_BUILD}\nRun build step first.")
         with tempfile.TemporaryDirectory(prefix="emacs-app-stage-") as temp_dir:
             path_stage = Path(temp_dir) / "Emacs.app"
-            print(f"==> Staging {PATH_APP_MACOS_BUILD} -> {path_stage}")
+            log_info(f"Staging {PATH_APP_MACOS_BUILD} -> {path_stage}")
             shutil.copytree(PATH_APP_MACOS_BUILD, path_stage, symlinks=True)
             config_native_comp_write(path_stage)
             plist_gui_library_path_set(path_stage)
-            icon_apply_macos(path_stage)
+            icon_apply_macos(path_stage, source_worktree)
             app_sign(path_stage)
 
             PATH_APP_MACOS_INSTALL.parent.mkdir(parents=True, exist_ok=True)
             if PATH_APP_MACOS_INSTALL.exists() or PATH_APP_MACOS_INSTALL.is_symlink():
+                log_info(f"Removing existing installation at {PATH_APP_MACOS_INSTALL}")
                 system_cmd_run("sudo", "rm", "-rf", str(PATH_APP_MACOS_INSTALL))
+            log_info(f"Installing staged app to {PATH_APP_MACOS_INSTALL}")
             system_cmd_run("sudo", "ditto", str(path_stage), str(PATH_APP_MACOS_INSTALL))
 
         verify_macos(PATH_APP_MACOS_INSTALL)
-        print(f"\n==> Installed {PATH_APP_MACOS_INSTALL}")
-        print(f"==> Reusable build app remains at {PATH_APP_MACOS_BUILD}")
+        log_ok(f"Successfully installed to {PATH_APP_MACOS_INSTALL}")
+        log_info(f"Reusable build app remains at {PATH_APP_MACOS_BUILD}")
     else:
-        icon_apply_linux()
+        icon_apply_linux(source_worktree)
+        desktop_apply_linux()
         verify_linux()
-        print(f"\n==> Installed to {PATH_PREFIX_LINUX}")
+        log_ok(f"Successfully installed to {PATH_PREFIX_LINUX}")
 
 def verify_macos(app_path):
+    log_section("Verifying macOS Installation")
     path_emacs_executable = app_path / "Contents/MacOS/Emacs"
     if not path_emacs_executable.exists():
-        system_die(f"missing Emacs executable: {path_emacs_executable}")
-    print("\n========================================")
-    print(" Verifying installed macOS Emacs")
-    print("========================================")
+        system_die(f"Missing Emacs executable: {path_emacs_executable}")
+
     system_cmd_run(str(path_emacs_executable), "--batch", "--eval",
         '(progn (princ (format "version=%s\\n" emacs-version)) '
         '(princ (format "native-comp=%s\\n" '
@@ -354,25 +510,27 @@ def verify_macos(app_path):
     path_lib = system_cmd_out(str(path_gcc), "-print-file-name=libemutls_w.a")
     if not Path(path_lib).is_absolute() or not Path(path_lib).exists():
         system_die(f"Homebrew GCC cannot resolve libemutls_w.a: {path_lib}")
-    print(f"GCC support: {Path(path_lib).parent}")
-    print(f"libgccjit:    {brew_gcc_lib_dir_path()}")
-    print("Native compilation support: OK")
+    log_ok(f"GCC support path resolved: {Path(path_lib).parent}")
+    log_ok(f"libgccjit path resolved:    {brew_gcc_lib_dir_path()}")
+    log_ok("Native compilation capability check complete")
 
 def verify_linux():
+    log_section("Verifying Linux Installation")
     path_emacs_executable = PATH_PREFIX_LINUX / "bin" / "emacs"
     if not path_emacs_executable.exists():
-        system_die(f"missing Linux Emacs: {path_emacs_executable}")
-    print("\n========================================")
-    print(" Verifying installed Linux Emacs")
-    print("========================================")
+        system_die(f"Missing Linux Emacs: {path_emacs_executable}")
+
     system_cmd_run(str(path_emacs_executable), "--batch", "--eval",
         '(progn (princ (format "version=%s\\n" emacs-version)) '
         '(princ (format "native-comp=%s\\n" '
         '(if (native-comp-available-p) "yes" "no"))))')
+    log_ok("Emacs binary verification complete")
 
 
 # --- MAIN ENTRY POINT ---
 def main():
+    time_start = time.time()
+
     arg_parser = argparse.ArgumentParser(description="Emacs builder")
     arg_parser.add_argument("channel", nargs="?", choices=("latest", "stable"), default="latest", help="Emacs source channel (default: latest)")
     arg_parser.add_argument("--clean", action="store_true", help="discard the existing build configuration and build from scratch")
@@ -380,7 +538,21 @@ def main():
 
     git_repo_setup()
 
+    # Target worktree according to chosen channel
+    if parsed_args.channel == "latest":
+        source_worktree = PATH_WORKTREE_MASTER
+        target_ref = "master"
+    else:
+        stable_tag = git_detect_latest_stable_tag()
+        source_worktree = PATH_WORKTREE_STABLE_ROOT / stable_tag
+        target_ref = stable_tag
+        git_worktree_ensure(source_worktree, stable_tag)
+
+    # Verify remotes, sync bare repo (origin), and update worktree
+    git_sync_worktree(source_worktree, target_ref)
+
     if parsed_args.clean:
+        log_info("Clean build requested: Removing build tree...")
         shutil.rmtree(PATH_WORKTREE_BUILD, ignore_errors=True)
 
     if sys.platform == "darwin":
@@ -388,11 +560,14 @@ def main():
     elif sys.platform.startswith("linux"):
         tools_require_linux()
     else:
-        system_die(f"unsupported platform: {sys.platform}")
+        system_die(f"Unsupported platform: {sys.platform}")
 
-    git_channel_checkout(parsed_args.channel)
-    emacs_build(parsed_args.channel)
-    emacs_package_and_install()
+    emacs_build_from_source(source_worktree, parsed_args.channel)
+    emacs_package_and_install(source_worktree)
+
+    time_elapsed = time.time() - time_start
+    log_section("Build Execution Summary")
+    log_ok(f"Completed Emacs build pipeline successfully in {time_elapsed:.2f} seconds.")
 
 if __name__ == "__main__":
     main()
