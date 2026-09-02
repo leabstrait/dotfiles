@@ -303,3 +303,11 @@ Applies initial adjustments and registers active symlink matrices into place usi
       echo "❌ Error: Host deployment configuration script could not be executed at $CONFIGS_ENGINE"
   fi
 #+END_SRC
+
+* Editors
+
+** emacs
+    Start as a daemon on system start 
+#+BEGIN_SRC shell
+	systemctl --user enable emacs
+#+END_SRC

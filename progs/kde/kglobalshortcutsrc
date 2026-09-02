@@ -324,7 +324,7 @@ RunClipboard=Meta+Shift+Space
 _launch=Search\tMeta+Space
 
 [services][org.kde.spectacle.desktop]
-CurrentMonitorScreenShot=none
+OpenWithoutScreenshot=none
 
 [services][systemsettings.desktop]
 _launch=Tools
