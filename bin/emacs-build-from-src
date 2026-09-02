@@ -329,27 +329,6 @@ def icon_apply_linux(source_worktree):
             path_dest_dir = (PATH_PREFIX_LINUX / "share" / "icons" / "hicolor" / f"{size}x{size}" / "apps" / "emacs.png")
             system_cmd_run("sudo", "install", "-Dm644", str(path_icon_stage), str(path_dest_dir))
 
-def desktop_apply_linux():
-    log_info("Installing .desktop entry for Linux...")
-    path_desktop_stage = PATH_WORKTREE_BUILD / "emacs.desktop"
-    path_emacs = PATH_PREFIX_LINUX / "bin" / "emacs"
-    desktop_text = f"""[Desktop Entry]
-Name=Emacs
-GenericName=Text Editor
-Comment=GNU Emacs
-Exec={path_emacs} %F
-Icon=emacs
-Type=Application
-Terminal=false
-Categories=Development;TextEditor;
-MimeType=text/plain;text/x-c;text/x-c++;text/x-java;text/x-python;text/x-shellscript;text/x-makefile;text/x-cmake;
-StartupWMClass=Emacs;
-"""
-    path_desktop_stage.write_text(desktop_text)
-    path_desktop_dest = PATH_PREFIX_LINUX / "share" / "applications" / "emacs.desktop"
-    system_cmd_run("sudo", "install", "-Dm644", str(path_desktop_stage), str(path_desktop_dest))
-
-
 # --- BUILD PROCEDURES ---
 def emacs_build_from_source(source_worktree, channel_name):
     log_section(f"Compiling Emacs Source (Channel: {channel_name})")
@@ -492,7 +471,6 @@ def emacs_package_and_install(source_worktree):
         log_info(f"Reusable build app remains at {PATH_APP_MACOS_BUILD}")
     else:
         icon_apply_linux(source_worktree)
-        desktop_apply_linux()
         verify_linux()
         log_ok(f"Successfully installed to {PATH_PREFIX_LINUX}")
 
