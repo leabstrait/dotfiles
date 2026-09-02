@@ -1,113 +1,166 @@
 ;; -*- lexical-binding: t; -*-
 
-(require 'package)
-
-;; MELPA provides community packages; ELPA/Nongnu provide GNU packages.
-(setq package-archives
-'(("melpa" . "https://melpa.org/packages/")
-("elpa" . "https://elpa.gnu.org/packages/")
-("nongnu" . "https://elpa.nongnu.org/nongnu/")))
-
-;; Refresh package metadata only when it is not already available.
-(unless package-archive-contents
-(package-refresh-contents))
-
-(setq package-quickstart t)
-(package-quickstart-refresh)
-
-(require 'use-package-ensure)
-(setq use-package-always-ensure t)
-
-;; Async keeps package/file operations from unnecessarily blocking Emacs.
-(use-package async
-:defer t
-:custom
-(dired-async-mode t)
-(async-bytecomp-package-mode t)
-(async-bytecomp-allowed-packages '(all))
-(async-package-do-action t))
-
 (defun start/display-startup-time ()
-"Display Emacs startup time and number of garbage collections."
-(interactive)
-(message "Emacs loaded in %.2f seconds with %d garbage collections."
-(float-time
-(time-subtract after-init-time before-init-time))
-gcs-done))
+  "Display Emacs startup time and number of garbage collections."
+  (interactive)
+  (message "Emacs loaded in %.2f seconds with %d garbage collections."
+           (float-time
+            (time-subtract after-init-time before-init-time))
+           gcs-done))
 
 (add-hook 'emacs-startup-hook #'start/display-startup-time)
 
-;;(when (memq window-system '(mac ns x))
-;;  (use-package exec-path-from-shell
-;;    :ensure t
-;;    :config
-;;    (exec-path-from-shell-initialize)))
+;; Calculate physical display density dynamically to adjust font scaling,
+;; ensuring crisp readability across high-res Retina and standard screens.
+(defun my/set-font-size-by-dpi (&optional frame)
+  "Dynamically set default font height based on calculated display DPI."
+  (message "[font] Function 'my/set-font-size-by-dpi' invoked (frame: %s)..." frame)
+  ;; If a frame is passed (via after-make-frame-functions), select it first.
+  (when frame (select-frame frame))
 
+  ;; Only attempt DPI calculation if we are in a graphical environment.
+  (if (display-graphic-p)
+      (let* ((attrs (car (display-monitor-attributes-list)))
+             (geom  (cdr (assq 'geometry attrs)))
+             (mm    (cdr (assq 'mm-size attrs)))
+             (px-w  (nth 2 geom))
+             (mm-w  (car mm))
+             ;; Safely compute DPI only if mm-width is reported and > 0
+             (dpi   (and px-w mm-w (> mm-w 0) (* (/ (float px-w) mm-w) 25.4)))
+             ;; 3-tier scaling: High DPI -> 180, Standard -> 140, Low DPI / fallback -> 100 (10pt)
+             (height (cond
+                      ((and dpi (> dpi 150)) 180)
+                      ((and dpi (> dpi 110)) 140)
+                      (t 100))))
+        (set-face-attribute 'default nil
+                            :font "FiraCode Nerd Font"
+                            :height height
+                            :weight 'medium)
+        (message "[font] GUI Initialized. DPI: %s | Applied height: %d"
+                 (if dpi (format "%.1f" dpi) "fallback") height))
+
+    ;; Fallback for terminal/headless Emacs
+    (message "[font] Terminal mode detected. Skipping DPI calculation.")))
+
+;; Recalculate font scaling when the window system fully initializes.
+(add-hook 'window-setup-hook
+          (lambda ()
+            (message "[hook] window-setup-hook fired. Executing DPI font scale...")
+            (my/set-font-size-by-dpi)))
+
+;; Ensure newly spawned frames evaluate this (handles multi-monitor or daemon setups)
+(add-hook 'after-make-frame-functions
+          (lambda (frame)
+            (message "[hook] after-make-frame-functions fired for frame: %s" frame)
+            (my/set-font-size-by-dpi frame)))
+
+(setq-default line-spacing 0.12)
+
+;; This code eliminates the need to type :ensure t for each package download.
+(require 'use-package-ensure)
+(setq use-package-always-ensure t)
+
+;; MELPA provides community packages; ELPA/Nongnu provide GNU packages.
+(setq package-archives
+      '(("melpa" . "https://melpa.org/packages/")
+        ("elpa" . "https://elpa.gnu.org/packages/")
+        ("nongnu" . "https://elpa.nongnu.org/nongnu/")))
+
+
+;; Improves startup times by allowing Emacs to precompute and generate a single, large autoload file.
+;; Instead of re-computing them on every startup.
+;; The larger your configuration, the more it will be felt at startup.
+;; However, if you enable this, you'll need to manually run the package-quickstart-refresh
+;; command whenever your package activations change, such as when you modify the package-load-list
+(setq package-quickstart t)
+
+
+;; Async keeps package/file operations from unnecessarily blocking Emacs.
+;; Only works with package.el
+(use-package async
+  :defer t
+  :custom
+  (dired-async-mode t)
+  (async-bytecomp-package-mode t)
+  (async-bytecomp-allowed-packages '(all))
+  (async-package-do-action t))
 
 (use-package emacs
-:custom
-;; Keep the interface minimal; these are still relevant in terminals.
-(menu-bar-mode nil)
-(scroll-bar-mode nil)
-(tool-bar-mode nil)
+  :custom
+  ;; Keep the interface minimal; these are still relevant in terminals.
+  (menu-bar-mode nil)
+  (scroll-bar-mode nil)
+  (tool-bar-mode nil)
 
-(inhibit-startup-screen t)
+  (inhibit-startup-screen t)
 
-;; Editing behavior.
-(delete-selection-mode t)
-(electric-indent-mode nil)
-(electric-pair-mode t)
-(blink-cursor-mode nil)
-(global-auto-revert-mode t)
+  ;; Editing behavior.
+  (delete-selection-mode t)
+  (electric-indent-mode nil)
+  (electric-pair-mode t)
+  (blink-cursor-mode nil)
+  (global-auto-revert-mode t)
 
-;; Scrolling: preserve context without aggressive recentering.
-(mouse-wheel-progressive-speed nil)
-(scroll-conservatively 10)
-(scroll-margin 8)
+  (use-short-answers t)   ; Since Emacs 29, `yes-or-no-p' will use `y-or-n-p'
 
-;; Four-space indentation is the general configuration convention.
-(indent-tabs-mode nil)
-(tab-width 4)
-(sgml-basic-offset 4)
-(c-ts-mode-indent-offset 4)
-(go-ts-mode-indent-offset 4)
+  (dired-kill-when-opening-new-dired-buffer t) ; Dired doesn't create new buffer
+ (dired-mouse-drag-files t) ; Enable Drag and Drop support in dired (Only works in X11)
 
-;; Avoid backup and auto-save files beside project files.
-(make-backup-files nil)
-(auto-save-default nil)
-(delete-by-moving-to-trash t)
+ (recentf-mode t) ; Enable recent file mode
+ (context-menu-mode t) ; Right-click menu
+ (savehist-mode t) ; Enables save history mode
 
-;; Persistent visual aids.
-(global-display-line-numbers-mode t)
-(global-hl-line-mode t)
+  ;; Scrolling: preserve context without aggressive recentering.
+  (mouse-wheel-progressive-speed nil)
+  (scroll-conservatively 10)            ; smooth scrolling
+  (scroll-margin 8)
 
-;; Smooth pixel scrolling without momentum.
-(pixel-scroll-precision-mode t)
-(pixel-scroll-precision-use-momentum nil)
+  ;; Smooth pixel scrolling without momentum.
+  (pixel-scroll-precision-mode t) ; Precise pixel scrolling. i.e. smooth scrolling (GUI only)
+  (pixel-scroll-precision-use-momentum nil)
 
-;; Show tabs, tab marks, and trailing whitespace.
-(whitespace-style '(face tabs tab-mark trailing))
+  ;; Four-space indentation is the general configuration convention.
+  (indent-tabs-mode nil)
+  (tab-width 4)
+  (sgml-basic-offset 4)
+  (c-ts-mode-indent-offset 4)
+  (go-ts-mode-indent-offset 4)
 
-:hook
-(prog-mode . hs-minor-mode)
-(prog-mode . display-fill-column-indicator-mode)
-(prog-mode . whitespace-mode)
 
-:config
-;; Keep Customize-generated settings separate from this file.
-(setq custom-file
-(locate-user-emacs-file "custom.el"))
 
-(load custom-file 'noerror 'nomessage)
 
-:bind
-([escape] . keyboard-escape-quit)
+  ;; Avoid backup and auto-save files beside project files.
+  (make-backup-files nil)
+  (auto-save-default nil)
+  (delete-by-moving-to-trash t)
 
-;; Zoom text with the keyboard or Ctrl + mouse wheel.
-("C-+" . text-scale-increase)
-("C--" . text-scale-decrease)
-("<C-wheel-up>" . text-scale-increase)
-("<C-wheel-down>" . text-scale-decrease))
+  ;; Persistent visual aids.
+  (global-display-line-numbers-mode t)
+  (global-hl-line-mode t)
+
+  ;; Show tabs, tab marks, and trailing whitespace.
+  (whitespace-style '(face tabs tab-mark trailing))
+
+  :hook
+  (prog-mode . hs-minor-mode)
+  (prog-mode . display-fill-column-indicator-mode)
+  (prog-mode . whitespace-mode)
+
+  :config
+  ;; Keep Customize-generated settings separate from this file.
+  (setq custom-file
+        (locate-user-emacs-file "custom.el"))
+
+  (load custom-file 'noerror 'nomessage)
+
+  :bind
+  ([escape] . keyboard-escape-quit)
+
+  ;; Zoom text with the keyboard or Ctrl + mouse wheel.
+  ("C-+" . text-scale-increase)
+  ("C--" . text-scale-decrease)
+  ("<C-wheel-up>" . text-scale-increase)
+  ("<C-wheel-down>" . text-scale-decrease))
 
 ;; Keep these defaults explicit for modes that do not inherit the settings
 ;; above directly.
