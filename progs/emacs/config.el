@@ -10,51 +10,53 @@
 
 (add-hook 'emacs-startup-hook #'start/display-startup-time)
 
-;; Calculate physical display density dynamically to adjust font scaling,
-;; ensuring crisp readability across high-res Retina and standard screens.
 (defun my/set-font-size-by-dpi (&optional frame)
-  "Dynamically set default font height based on calculated display DPI."
-  (message "[font] Function 'my/set-font-size-by-dpi' invoked (frame: %s)..." frame)
-  ;; If a frame is passed (via after-make-frame-functions), select it first.
-  (when frame (select-frame frame))
-
-  ;; Only attempt DPI calculation if we are in a graphical environment.
-  (if (display-graphic-p)
-      (let* ((attrs (car (display-monitor-attributes-list)))
+  "Dynamically set default font height normalized across macOS, Linux, and external displays."
+  (let* ((target-frame (or frame (selected-frame))))
+    (when (display-graphic-p target-frame)
+      (let* ((attrs (frame-monitor-attributes target-frame))
              (geom  (cdr (assq 'geometry attrs)))
              (mm    (cdr (assq 'mm-size attrs)))
              (px-w  (nth 2 geom))
              (mm-w  (car mm))
-             ;; Safely compute DPI only if mm-width is reported and > 0
-             (dpi   (and px-w mm-w (> mm-w 0) (* (/ (float px-w) mm-w) 25.4)))
-             ;; 3-tier scaling: High DPI -> 180, Standard -> 140, Low DPI / fallback -> 100 (10pt)
+             ;; Frame scaling factor (2.0 on Mac Retina, 1.0 on standard Linux)
+             (scale (if (fboundp 'frame-scale-factor)
+                        (frame-scale-factor target-frame)
+                      1.0))
+             ;; Raw DPI based on reported display geometry
+             (raw-dpi (and px-w mm-w (> mm-w 0) (* (/ (float px-w) mm-w) 25.4)))
+             ;; Normalized logical DPI
+             (effective-dpi (and raw-dpi (/ raw-dpi scale)))
+             ;; Corrected Tiering:
+             ;; 1. HiDPI scaling active (e.g. macOS Retina, scale >= 2.0) -> 140
+             ;; 2. High physical DPI on standard scale (e.g. Linux 1080p laptop, ~140 DPI) -> 110
+             ;; 3. Low DPI / Large external monitors (< 110 DPI) -> 100
              (height (cond
-                      ((and dpi (> dpi 150)) 180)
-                      ((and dpi (> dpi 110)) 140)
-                      (t 100))))
-        (set-face-attribute 'default nil
+                       ((>= scale 2.0) 140)
+                       ((and effective-dpi (> effective-dpi 110)) 110)
+                       (t 100))))
+
+        ;; Apply font settings to the target frame
+        (set-face-attribute 'default target-frame
                             :font "FiraCode Nerd Font"
                             :height height
-                            :weight 'medium)
-        (message "[font] GUI Initialized. DPI: %s | Applied height: %d"
-                 (if dpi (format "%.1f" dpi) "fallback") height))
+                            :weight 'normal) ;; 'normal fixes excess boldness on macOS
+        (message "[font] Frame %s | Scale: %.1f | Effective DPI: %s | Height: %d"
+                 target-frame
+                 scale
+                 (if effective-dpi (format "%.1f" effective-dpi) "N/A")
+                 height)))))
 
-    ;; Fallback for terminal/headless Emacs
-    (message "[font] Terminal mode detected. Skipping DPI calculation.")))
+;; Initialize on startup
+(add-hook 'window-setup-hook #'my/set-font-size-by-dpi)
 
-;; Recalculate font scaling when the window system fully initializes.
-(add-hook 'window-setup-hook
-          (lambda ()
-            (message "[hook] window-setup-hook fired. Executing DPI font scale...")
-            (my/set-font-size-by-dpi)))
+;; Handle newly spawned client frames (daemon mode or multi-window)
+(add-hook 'after-make-frame-functions #'my/set-font-size-by-dpi)
 
-;; Ensure newly spawned frames evaluate this (handles multi-monitor or daemon setups)
-(add-hook 'after-make-frame-functions
-          (lambda (frame)
-            (message "[hook] after-make-frame-functions fired for frame: %s" frame)
-            (my/set-font-size-by-dpi frame)))
+;; Dynamically adjust when dragging frames across external monitors
+(add-hook 'move-frame-functions #'my/set-font-size-by-dpi)
 
-(setq-default line-spacing 0.12)
+     (setq-default line-spacing 0.12)
 
 ;; This code eliminates the need to type :ensure t for each package download.
 (require 'use-package-ensure)
