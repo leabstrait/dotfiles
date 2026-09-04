@@ -199,6 +199,32 @@ truncate-lines t)
 (when (fboundp 'scroll-bar-mode)
 (scroll-bar-mode -1))
 
+(use-package gptel
+  :ensure t
+  :bind (("C-c C-g" . gptel-send)   ; Safe shortcut to send active region/buffer
+         ("C-c g"   . gptel-menu))  ; Quick access menu to swap models/servers
+  :config
+  ;; Default to org-mode instead of markdown-mode for dedicated chats
+  (setq gptel-default-mode 'org-mode)
+
+  ;; Configure the remote Ollama server
+  (setq gptel-work
+        (gptel-make-ollama "Ollama-Server"
+                           :host "192.168.100.120:11434"
+                           :stream t
+                           :models '("qwen2.5-coder:3b" "gemma4:e4b-it-qat" "gemma4:e2b-it-qat")))
+
+  ;; Configure the local Ollama server
+  (setq gptel-local
+        (gptel-make-ollama "Ollama"
+                           :host "localhost:11434"
+                           :stream t
+                           :models '("llama3.2:1b" "deepseek-coder:1.3b" "qwen2.5-coder:3b" "gemma3:4b")))
+
+  ;; Set the default backend and model
+  (setq gptel-backend gptel-work)
+  (setq gptel-model "qwen2.5-coder:3b"))
+
 (use-package which-key
 :hook (after-init . which-key-mode)
 :diminish

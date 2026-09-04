@@ -14,8 +14,8 @@ export PATH="$HOME/.local/bin:$PATH"
 # ---------------------------------------------------------------------
 # 2. EDITOR, PAGER & FORMATTING ENVIRONMENT
 # ---------------------------------------------------------------------
-export EDITOR='emacs'
-export VISUAL='emacs'
+export EDITOR='emacsclient -t'
+export VISUAL='emacsclient -c -a ""'
 export PAGER='less'
 export MANPAGER='less -R'
 export MANROFFOPT='-P -c'

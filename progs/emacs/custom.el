@@ -5,9 +5,9 @@
  ;; Your init file should contain only one such instance.
  ;; If there is more than one, they won't work right.
  '(package-selected-packages
-   '(company dockerfile-mode expand-region flycheck helm indent-bars
-             ligature lsp-mode lsp-ui magit marginalia multi-vterm
-             no-littering posframe undo-tree vertico vterm
+   '(company dockerfile-mode expand-region flycheck gptel helm
+             indent-bars ligature lsp-mode lsp-ui magit marginalia
+             multi-vterm no-littering posframe undo-tree vertico vterm
              vterm-toggle web-mode yafolding yaml-mode)))
 (custom-set-faces
  ;; custom-set-faces was added by Custom.
@@ -20,6 +20,8 @@
  '(company-tooltip-scrollbar-track ((t (:background "#222831"))))
  '(company-tooltip-selection ((t (:background "#1b4950" :foreground "#00adb5" :weight bold))))
  '(cursor ((t (:background "#00adb5"))))
+ '(flycheck-fringe-info ((t (:foreground "#00adb5"))))
+ '(flycheck-fringe-warning ((t (:foreground "#00adb5"))))
  '(fringe ((t (:background "#1a1e24" :foreground "#008389"))))
  '(helm-candidate-number ((t (:foreground "#008389" :weight bold))))
  '(helm-header ((t (:background "#1a1e24" :foreground "#00adb5"))))
