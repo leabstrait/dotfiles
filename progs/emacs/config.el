@@ -11,7 +11,7 @@
 (add-hook 'emacs-startup-hook #'start/display-startup-time)
 
 (defun my/set-font-size-by-dpi (&optional frame)
-  "Dynamically set default font height normalized across macOS, Linux, and external displays."
+  "Dynamically set fine-grained font height normalized across macOS, Linux, and external displays."
   (let* ((target-frame (or frame (selected-frame))))
     (when (display-graphic-p target-frame)
       (let* ((attrs (frame-monitor-attributes target-frame))
@@ -19,33 +19,48 @@
              (mm    (cdr (assq 'mm-size attrs)))
              (px-w  (nth 2 geom))
              (mm-w  (car mm))
-             ;; Frame scaling factor (2.0 on Mac Retina, 1.0 on standard Linux)
+             ;; Frame scaling factor (2.0 on Mac Retina, 1.0 on Linux 1080p)
              (scale (if (fboundp 'frame-scale-factor)
                         (frame-scale-factor target-frame)
                       1.0))
              ;; Raw DPI based on reported display geometry
              (raw-dpi (and px-w mm-w (> mm-w 0) (* (/ (float px-w) mm-w) 25.4)))
-             ;; Normalized logical DPI
-             (effective-dpi (and raw-dpi (/ raw-dpi scale)))
-             ;; Corrected Tiering:
-             ;; 1. HiDPI scaling active (e.g. macOS Retina, scale >= 2.0) -> 140
-             ;; 2. High physical DPI on standard scale (e.g. Linux 1080p laptop, ~140 DPI) -> 110
-             ;; 3. Low DPI / Large external monitors (< 110 DPI) -> 100
-             (height (cond
-                       ((>= scale 2.0) 140)
-                       ((and effective-dpi (> effective-dpi 110)) 110)
-                       (t 100))))
 
-        ;; Apply font settings to the target frame
+             ;; Normalized logical DPI
+
+             ;; Fine-grained multi-tier mapping:
+             ;; - Retina / HiDPI (scale >= 2.0):
+             ;;     > 85 eff-DPI (e.g. Mac Studio Display / 4K scaled) -> 145
+             ;;     <= 85 eff-DPI (e.g. MacBook Built-in Retina ~74.8) -> 135
+             ;;
+             ;; - Standard DPI (scale < 2.0):
+             ;;     > 150 raw-dpi (e.g. High-density 13"/14" 1080p/2K Linux) -> 110
+             ;;     > 120 raw-dpi (e.g. Linux Laptop 15.6" 1080p ~141.8 DPI) -> 100 (ANCHOR)
+             ;;     > 90 raw-dpi  (e.g. Standard External 24" 1080p / 27" 1440p) -> 95
+             ;;     <= 90 raw-dpi (e.g. Low-density large external display)     -> 90
+             (height (if (>= scale 2.0)
+                         (let ((eff-dpi (and raw-dpi (/ raw-dpi scale))))
+                           (cond
+                            ((and eff-dpi (> eff-dpi 85)) 145)
+                            (t 135)))
+                       (cond
+                        ((and raw-dpi (> raw-dpi 150)) 110)
+                        ((and raw-dpi (> raw-dpi 120)) 100) ;; Linux laptop baseline (141.8 DPI -> 100)
+                        ((and raw-dpi (> raw-dpi 90))  95)  ;; Standard external monitor baseline
+                        (t 90)))))                           ;; Low-density fallback
+
+        ;; Apply settings to default face
         (set-face-attribute 'default target-frame
                             :font "FiraCode Nerd Font"
                             :height height
-                            :weight 'normal) ;; 'normal fixes excess boldness on macOS
-        (message "[font] Frame %s | Scale: %.1f | Effective DPI: %s | Height: %d"
+                            :weight 'normal) ;; 'normal prevents over-bold text on macOS CoreText
+        (message "[font] Frame %s | Scale: %.1f | Raw DPI: %s | Applied Height: %d"
                  target-frame
                  scale
-                 (if effective-dpi (format "%.1f" effective-dpi) "N/A")
+                 (if raw-dpi (format "%.1f" raw-dpi) "N/A")
                  height)))))
+
+;; Hooks for initial startup, client frame spawns, and cross-monitor frame dragging
 
 ;; Initialize on startup
 (add-hook 'window-setup-hook #'my/set-font-size-by-dpi)
@@ -56,7 +71,7 @@
 ;; Dynamically adjust when dragging frames across external monitors
 (add-hook 'move-frame-functions #'my/set-font-size-by-dpi)
 
-     (setq-default line-spacing 0.12)
+(setq-default line-spacing 0.12)
 
 ;; This code eliminates the need to type :ensure t for each package download.
 (require 'use-package-ensure)
