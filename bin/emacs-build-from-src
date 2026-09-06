@@ -309,11 +309,27 @@ def service_daemon_enable_linux():
         log_warn(f"Systemd service file not found at {installed_service}. Skipping service enable.")
         return
 
-    PATH_SYSTEMD_SERVICE.parent.mkdir(parents=True, exist_ok=True)
-    if PATH_SYSTEMD_SERVICE.is_symlink() or PATH_SYSTEMD_SERVICE.exists(): PATH_SYSTEMD_SERVICE.unlink()
-    PATH_SYSTEMD_SERVICE.symlink_to(installed_service)
-    log_ok(f"Symlinked {installed_service} -> {PATH_SYSTEMD_SERVICE}")
+    # 1. Kill any standalone non-systemd Emacs server instances
+    subprocess.run(["killall", "emacs"], stderr=subprocess.DEVNULL)
 
+    # 2. Clear stale socket files from /run/user/<uid>/emacs/ and /tmp/
+    uid = os.getuid()
+    for socket_dir in [f"/run/user/{uid}/emacs", f"/tmp/emacs{uid}"]:
+        if os.path.exists(socket_dir):
+            shutil.rmtree(socket_dir, ignore_errors=True)
+
+    # 3. Setup systemd service file
+    PATH_SYSTEMD_SERVICE.parent.mkdir(parents=True, exist_ok=True)
+
+    # Remove existing symlink or file if present
+    if PATH_SYSTEMD_SERVICE.is_symlink() or PATH_SYSTEMD_SERVICE.exists():
+        PATH_SYSTEMD_SERVICE.unlink()
+
+    # COPY the unit file instead of symlinking to satisfy systemd restrictions
+    shutil.copy(installed_service, PATH_SYSTEMD_SERVICE)
+    log_ok(f"Copied {installed_service} -> {PATH_SYSTEMD_SERVICE}")
+
+    # 4. Reload and start cleanly
     system_cmd_run("systemctl", "--user", "daemon-reload")
     system_cmd_run("systemctl", "--user", "enable", "--now", "emacs.service")
     log_ok("Emacs server auto-run service enabled and started via systemd!")
