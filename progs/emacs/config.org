@@ -99,8 +99,8 @@ When you press a key, Emacs filters your input through a strict map hierarchy. T
                   (height (if (>= scale 2.0)
                               (let ((eff-dpi (and raw-dpi (/ raw-dpi scale))))
                                 (cond
-                                 ((and eff-dpi (> eff-dpi 85)) 145)
-                                 (t 135)))
+                                 ((and eff-dpi (> eff-dpi 85)) 140)
+                                 (t 130)))
                             (cond
                              ((and raw-dpi (> raw-dpi 150)) 110)
                              ((and raw-dpi (> raw-dpi 120)) 100) ;; Linux laptop baseline (141.8 DPI -> 100)
